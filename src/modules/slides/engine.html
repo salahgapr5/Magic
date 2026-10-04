@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700&family=Inter:wght@500;600&family=Noto+Sans+Arabic:wght@600&display=swap" rel="stylesheet">
+<title>Audio to SVG Timeline</title>
+<style>
+main{display:none}
+:root{--bg:#f4f1ec;--ink:#1e2a38;--mut:#6b7684;--line:#d9d3c9;--acc:#2f6fb5;--card:#fff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Avenir Next",Avenir,"Segoe UI",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px 60px}
+h1{font-size:26px;margin:0 0 4px}p.sub{margin:0 0 18px;color:var(--mut)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+label{display:block;font-size:13px;color:var(--mut);margin-bottom:3px}
+input,select,textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff;color:var(--ink)}
+button{padding:9px 14px;border:0;border-radius:6px;background:var(--acc);color:#fff;font:inherit;cursor:pointer}
+button.alt{background:#e8e3da;color:var(--ink)}button:disabled{opacity:.5;cursor:wait}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #f2b34c;outline-offset:1px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+#status{color:var(--mut);font-size:14px}#status.err{color:#b3261e}
+audio{width:100%;margin-top:10px}
+#tl{position:relative;height:46px;background:#ebe6dd;border-radius:6px;margin-top:12px;overflow:hidden}
+.seg{position:absolute;top:0;height:100%;border-right:2px solid #fff;background:#a9c7e8;color:var(--ink);font-size:12px;padding:4px;cursor:pointer;overflow:hidden;white-space:nowrap}
+.seg.on{background:var(--acc);color:#fff}
+#head{position:absolute;top:0;width:2px;height:100%;background:#d4382c;pointer-events:none}
+#view{margin-top:12px;border-radius:8px;overflow:hidden;background:#ddd;aspect-ratio:16/9}
+#view svg,.thumb svg{width:100%;height:100%;display:block}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:14px}
+.card{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff}
+.card.on{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc)}
+.thumb{aspect-ratio:16/9;border-radius:6px;overflow:hidden;background:#eee;cursor:pointer}
+.card h4{margin:8px 0 6px;font-size:14px}.card .row{margin-top:6px}
+.card input{width:76px}.card button{padding:5px 9px;font-size:13px}
+details pre{white-space:pre-wrap;max-height:220px;overflow:auto;font-size:13px;margin:8px 0 0}
+h3{font-size:14px;margin:16px 0 8px;color:var(--acc)}h3:first-child{margin-top:0}#view{contain:paint}
+#view .a-fade,#view .a-up,#view .a-pop,#view .a-icon{animation-fill-mode:both;animation-timing-function:cubic-bezier(.22,1,.36,1);animation-duration:.7s;animation-delay:var(--d,0s);transform-box:fill-box;transform-origin:center}
+#view .a-fade{animation-name:fadeIn}#view .a-up{animation-name:up}#view .a-pop{animation-name:pop}
+#view .a-icon{animation-name:pop;animation-delay:calc(var(--d,0s) + .3s)}
+#view .a-draw{stroke-dasharray:1;stroke-dashoffset:1;animation:draw .9s ease-out both;animation-delay:calc(var(--d,0s) + .4s)}
+#view .a-breathe{animation:breathe 4s ease-in-out infinite;transform-box:fill-box;transform-origin:50% 100%}
+#view .a-beat{animation:beat 1.6s ease-in-out 1.2s 3;transform-box:fill-box;transform-origin:center}
+#view .a-pulse{animation:pulse 1.2s ease-in-out 1s 3;transform-box:fill-box;transform-origin:center}
+#view .a-spin{animation:spin 30s linear infinite;transform-box:fill-box;transform-origin:center}
+#view.m-subtle{--t:14px;--s:.92}#view.m-lively{--t:36px;--s:.5}
+#view.m-lively .a-spin{animation-duration:12s}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes up{from{opacity:0;transform:translateY(var(--t,14px))}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(var(--s,.92))}60%{transform:scale(1.05)}to{opacity:1;transform:none}}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes breathe{50%{transform:scaleY(1.012)}}
+@keyframes beat{0%,100%{transform:scale(1)}15%{transform:scale(1.08)}30%{transform:scale(1)}45%{transform:scale(1.06)}}
+@keyframes pulse{50%{transform:scale(1.08)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+#view.m-off *{animation:none!important}#view.m-off .a-draw{stroke-dasharray:none;stroke-dashoffset:0}
+@media(prefers-reduced-motion:reduce){#view *{animation:none!important}#view .a-draw{stroke-dasharray:none;stroke-dashoffset:0}}
+/* 3D clay UI */
+:root{--bg:#cfe6ff;--ink:#12306b;--mut:#4d6a9c;--line:#d4e5fb;--acc:#2f7bff}
+body{background:radial-gradient(1100px 700px at 10% -10%,#eaf5ff 0,transparent 60%),radial-gradient(900px 700px at 100% 25%,#8ec5ff 0,transparent 55%),linear-gradient(160deg,#a9d4ff,#4d8dff 70%,#6b6dff);background-attachment:fixed;font-family:"Poppins","Inter","Segoe UI",sans-serif}
+h1{font-weight:700;font-size:30px;color:#fff;text-shadow:0 3px 0 #2a63d6,0 10px 20px #0b2a7866}p.sub{color:#eaf3ff}
+.panel{background:linear-gradient(180deg,#fff,#f1f7ff);border:2px solid #fff;border-radius:28px;padding:20px;box-shadow:0 18px 40px -12px #12348a77,inset 0 -6px 0 #dbe9ff}
+h3{color:#2f7bff}
+input,select,textarea{border:2px solid #d4e5fb;border-radius:14px;background:#f7fbff;box-shadow:inset 0 3px 6px #12348a1a}
+button{border-radius:16px;font-weight:600;background:linear-gradient(180deg,#6aa9ff,#2f6df0);box-shadow:inset 0 2px 0 #ffffff99,0 6px 0 #1f4fc2,0 12px 18px #12348a55;transition:transform .08s,box-shadow .08s}
+button:active:not(:disabled){transform:translateY(4px);box-shadow:inset 0 2px 0 #ffffff99,0 2px 0 #1f4fc2,0 6px 10px #12348a55}
+button.alt{background:linear-gradient(180deg,#fff,#e4efff);color:#1f4fc2;box-shadow:inset 0 2px 0 #fff,0 5px 0 #bcd3f5,0 10px 16px #12348a33}
+button.alt:active:not(:disabled){box-shadow:inset 0 2px 0 #fff,0 1px 0 #bcd3f5,0 4px 8px #12348a33}
+#tl{height:52px;background:#dbe9ff;border-radius:18px;box-shadow:inset 0 4px 8px #12348a22}
+.seg{background:linear-gradient(180deg,#d7e8ff,#b4d3fb);border-right:3px solid #fff;color:#12306b;font-weight:600}
+.seg.on{background:linear-gradient(180deg,#6aa9ff,#2f6df0);color:#fff}
+#view{border-radius:24px;box-shadow:0 20px 40px -10px #12348a88,0 0 0 4px #fff}
+.card{border:2px solid #fff;border-radius:22px;background:linear-gradient(180deg,#fff,#eef5ff);box-shadow:0 12px 24px -8px #12348a55,inset 0 -4px 0 #dbe9ff}
+.card.on{border-color:#2f7bff;box-shadow:0 0 0 3px #2f7bff,0 12px 24px -8px #12348a55}
+.thumb{border-radius:16px}
+</style></head><body><main>
+<h1>Audio to SVG timeline</h1>
+<p class="sub">Upload audio. Groq transcribes it, OpenAI picks the moments and writes an SVG for each one, and the images land on a timeline.</p>
+
+<section class="panel">
+ <h3>1. Connect</h3><div class="grid">
+  <div><label for="gk">Groq API key</label><input id="gk" type="password" autocomplete="off"></div>
+  <div><label for="ok">OpenAI API key</label><input id="ok" type="password" autocomplete="off"></div>
+  <div><label for="model">OpenAI model</label><input id="model" value="gpt-5.6-sol"></div>
+  <div><label for="topic">Topic / tone (optional)</label><input id="topic" placeholder="auto-detect"></div></div>
+ <h3>2. Audio and pacing</h3><div class="grid">
+  <div><label for="file">Audio file</label><input id="file" type="file" accept="audio/*,video/mp4"></div>
+  <div><label for="gap">One image every (seconds)</label><input id="gap" type="number" min="5" max="120" value="20"></div></div>
+ <h3>3. Visual style</h3><div class="grid">
+  <div><label for="style">Style</label><select id="style"></select></div>
+  <div><label for="anim">Animation</label><select id="anim"><option value="subtle">Subtle</option><option value="lively">Lively</option><option value="off">Off</option></select></div>
+  <div><label for="isrc">Icons</label><select id="isrc"><option value="mine" selected>My 3D library, then online</option><option value="auto">Online library (thousands of icons)</option><option value="builtin">Built-in only (offline)</option></select></div>
+  </div>
+ <audio id="au" controls></audio>
+ <div class="row">
+  <button id="go">1. Transcribe and create images</button>
+  <button id="again" class="alt" disabled>Make images again (same transcript)</button>
+  <span id="status"></span>
+ </div>
+ <details><summary>Transcript</summary><pre id="tx">Nothing yet.</pre></details>
+</section>
+
+<section class="panel">
+ <div class="row" style="margin-top:0"><strong>Timeline</strong><button id="replay" class="alt">Replay animation</button>
+  <button id="dlj" class="alt" disabled>Save project JSON</button><button id="dlv" class="alt" disabled>Export video (WebM)</button></div>
+ <div id="tl"><div id="head"></div></div>
+ <div id="view"></div>
+ <div class="cards" id="cards"></div>
+</section>
+</main>
+
+<script src="../../assets/icons-data.js"></script>
+<script>
+const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
+const S={segs:[],scenes:[],dur:0,sel:0};
+for(const k of['gk','ok','model']){try{const v=localStorage.getItem('a2s_'+k);if(v&&!(k==='model'&&v==='gpt-4.1'))$(k).value=v}catch(e){}
+ $(k).addEventListener('change',()=>{try{localStorage.setItem('a2s_'+k,$(k).value)}catch(e){}})}
+const say=(t,e)=>{$('status').textContent=t;$('status').className=e?'err':''};
+
+$('file').onchange=e=>{const f=e.target.files[0];if(f)$('au').src=URL.createObjectURL(f)};
+$('au').onloadedmetadata=()=>{S.dur=$('au').duration;draw()};
+
+/* ---------- Illustration engine (tested templates + icon library) ---------- */
+const MAN=`<g class="a-breathe"><g stroke="O" stroke-width="1.6" stroke-linejoin="round"><path d="M31 66h38l-1 28H53l-3-17-3 17H32z" fill="P"/><path d="M50 77l3 17h15l1-28h-8z" fill="X"/><path d="M30 95h17v4H27zM53 95h17l3 4H53z" fill="G"/><path d="M30 41c0-7 8-10 20-10s20 3 20 10v26H30z" fill="N"/><path d="M58 32c8 1 12 5 12 9v26H58z" fill="X"/><path d="M30 41c-4 9-4 20-2 28h7V42zM70 41c4 6 6 14 6 23h-6z" fill="N"/><circle cx="31" cy="71" r="4" fill="K"/><circle cx="74" cy="66" r="4" fill="K"/><path d="M43 32l7 11 7-11z" fill="W"/><path d="M49 41h2l2 11-3 4-3-4z" fill="R"/><rect x="46" y="29" width="8" height="6" fill="K"/><ellipse cx="50" cy="20" rx="11" ry="13" fill="K"/><circle cx="39" cy="21" r="2.5" fill="K"/><circle cx="61" cy="21" r="2.5" fill="K"/><path d="M38 17c-3-10 5-14 12-14s15 4 12 14c-3-5-8-6-12-6s-9 1-12 6z" fill="H"/><path d="M44 27c3-2 5 0 6 0s3-2 6 0c-1 4-4 4-6 2-2 2-5 2-6-2z" fill="H"/></g><g fill="none" stroke="S" stroke-width="1"><circle cx="45" cy="20" r="3.8"/><circle cx="55" cy="20" r="3.8"/><path d="M48.8 20h2.4"/></g><path d="M80 62v37M80 62c0-4 6-4 6 0" stroke="G" stroke-width="2.6" fill="none"/></g>`;
+const WOMAN=`<g class="a-breathe"><g stroke="O" stroke-width="1.6" stroke-linejoin="round"><rect x="40" y="88" width="6" height="9" fill="K"/><rect x="54" y="88" width="6" height="9" fill="K"/><path d="M37 96h10v3H35zM53 96h10l2 3H53z" fill="G"/><path d="M34 63h32l6 27H28z" fill="T"/><path d="M52 63h14l6 27H56z" fill="X"/><path d="M34 42c0-6 7-9 16-9s16 3 16 9v22H34z" fill="W"/><path d="M44 33l6 9 6-9z" fill="K"/><path d="M32 42c0-6 5-9 9-9l2 33H32zM68 42c0-6-5-9-9-9l-2 33h11z" fill="R"/><path d="M32 42c-4 8-4 18-3 27h6l1-27zM68 42c4 8 4 18 3 27h-6l-1-27z" fill="R"/><circle cx="32" cy="71" r="4" fill="K"/><circle cx="68" cy="71" r="4" fill="K"/><rect x="46" y="29" width="8" height="6" fill="K"/><circle cx="39" cy="8" r="6" fill="H"/><ellipse cx="50" cy="21" rx="11" ry="13" fill="K"/><path d="M38 19c-3-11 5-15 12-15s15 4 12 15c-3-6-8-7-12-7s-9 1-12 7z" fill="H"/></g><g fill="none" stroke="B" stroke-width="1.1"><circle cx="45" cy="22" r="4"/><circle cx="55" cy="22" r="4"/><path d="M49 22h2"/></g><path d="M46 29q4 3 8 0" fill="none" stroke="S" stroke-width="1"/></g>`;
+const COUPLE=`<g transform="translate(-6 10) scale(.82)">${WOMAN}</g><g transform="translate(28 14) scale(.76)">${MAN}</g>`;
+const ICONS={
+elder_man:MAN,elder_woman:WOMAN,couple:COUPLE,
+person:MAN,
+group:COUPLE,
+banana:`<path d="M14 22C4 74 46 102 94 64C86 58 80 58 74 62C52 76 28 62 34 24Z" fill="A"/><path d="M14 22l-1-12h20l1 14z" fill="B"/><path d="M20 50c8 22 28 28 50 14" stroke="L" stroke-width="3" fill="none"/>`,
+kidney:`<path d="M60 10C86 10 94 40 82 62C74 78 58 92 44 90C28 88 28 72 38 62C46 54 44 46 36 40C24 30 36 10 60 10Z" fill="E"/><path d="M52 36c10 4 16 14 12 26"/><path d="M62 16c14 6 18 20 13 34" stroke="L" stroke-width="3" fill="none"/>`,
+heart:`<path class="a-beat" d="M50 88C16 62 8 40 18 26C28 14 44 18 50 32C56 18 72 14 82 26C92 40 84 62 50 88Z" fill="E"/>`,
+lungs:`<path d="M50 14v34M50 40C40 32 22 36 16 60c-4 18 4 28 16 26 10-2 14-12 14-30M50 40c10-8 28-4 34 20 4 18-4 28-16 26-10-2-14-12-14-30" fill="E"/>`,
+gut:`<path d="M24 20h52c10 0 10 20 0 20H28c-10 0-10 20 0 20h48c10 0 10 20 0 20H24" stroke-width="15"/><path d="M24 20h52c10 0 10 20 0 20H28c-10 0-10 20 0 20h48c10 0 10 20 0 20H24" stroke="E" stroke-width="8"/>`,
+bowl:`<path d="M10 52h80c0 26-18 40-40 40S10 78 10 52z" fill="W"/><path d="M20 52c4-14 14-20 30-20s26 6 30 20" fill="A"/><ellipse cx="38" cy="44" rx="4" ry="2.5" fill="B"/><ellipse cx="52" cy="40" rx="4" ry="2.5" fill="B"/><ellipse cx="65" cy="45" rx="4" ry="2.5" fill="B"/>`,
+seed:`<g fill="A"><path d="M50 10c14 12 16 34 0 50c-16-16-14-38 0-50z"/><path d="M50 10c14 12 16 34 0 50c-16-16-14-38 0-50z" transform="translate(-26 28) rotate(-25 50 35)"/><path d="M50 10c14 12 16 34 0 50c-16-16-14-38 0-50z" transform="translate(26 28) rotate(25 50 35)"/></g>`,
+bottle:`<rect x="30" y="38" width="40" height="52" rx="8" fill="C"/><rect x="34" y="22" width="32" height="16" rx="4" fill="W"/><rect x="36" y="52" width="28" height="24" rx="3" fill="W"/>`,
+pill:`<g transform="rotate(-35 50 50)"><rect x="12" y="34" width="76" height="32" rx="16" fill="W"/><path d="M50 34H28A16 16 0 0 0 28 66H50Z" fill="B"/></g>`,
+clock:`<circle cx="50" cy="50" r="40" fill="W"/><path d="M50 22v28l18 10"/>`,
+calendar:`<rect x="12" y="20" width="76" height="68" rx="8" fill="W"/><path d="M12 28a8 8 0 0 1 8-8h60a8 8 0 0 1 8 8v14H12z" fill="B"/><path d="M32 12v16M68 12v16M26 58h10M45 58h10M64 58h10M26 74h10M45 74h10"/>`,
+decline:`<path d="M12 18v70h78"/><path class="a-draw" pathLength="1" d="M22 28l22 22 14-8 28 30" stroke="R" stroke-width="6"/><path d="M86 62v16H70" stroke="R" stroke-width="6"/>`,
+growth:`<path d="M12 18v70h78"/><path class="a-draw" pathLength="1" d="M22 76l22-22 14 8 28-30" stroke="D" stroke-width="6"/><path d="M86 38V22H70" stroke="D" stroke-width="6"/>`,
+chart:`<path d="M12 88h78"/><rect x="18" y="52" width="16" height="36" fill="C"/><rect x="42" y="30" width="16" height="58" fill="B"/><rect x="66" y="16" width="16" height="72" fill="D"/>`,
+check:`<circle cx="50" cy="50" r="40" fill="D"/><path d="M30 52l14 14 28-30" stroke="W" stroke-width="8"/>`,
+cross:`<circle cx="50" cy="50" r="40" fill="R"/><path d="M34 34l32 32M66 34L34 66" stroke="W" stroke-width="8"/>`,
+warning:`<g class="a-pulse"><path d="M50 10L92 86H8z" fill="A"/><path d="M50 36v26" stroke-width="7"/><circle cx="50" cy="74" r="3.5" fill="S"/></g>`,
+drop:`<path d="M50 8C70 36 82 50 82 66a32 32 0 0 1-64 0C18 50 30 36 50 8z" fill="C"/><path d="M36 66a14 14 0 0 0 12 14" stroke="L" stroke-width="4"/>`,
+leaf:`<path d="M14 86C10 40 40 12 90 12C90 60 66 90 14 86z" fill="D"/><path d="M14 86C34 60 54 40 76 26"/>`,
+sun:`<circle cx="50" cy="50" r="18" fill="A"/><path class="a-spin" d="M50 8v12M50 80v12M8 50h12M80 50h12M20 20l9 9M71 71l9 9M80 20l-9 9M29 71l-9 9"/>`,
+hospital:`<rect x="14" y="26" width="72" height="62" rx="4" fill="W"/><path d="M50 40v26M37 53h26" stroke="R" stroke-width="7"/><path d="M40 88V74h20v14"/>`,
+magnifier:`<circle cx="42" cy="42" r="28" fill="W"/><path d="M62 62l26 26" stroke-width="9"/>`,
+book:`<path d="M50 24C38 16 22 16 10 22v62c12-6 28-6 40 2 12-8 28-8 40-2V22C78 16 62 16 50 24z" fill="W"/><path d="M50 24v62"/>`,
+apple:`<path d="M50 30C36 18 12 28 14 56c2 24 20 38 36 30 16 8 34-6 36-30 2-28-22-38-36-26z" fill="R"/><path d="M50 30c0-10 4-16 12-20"/><path d="M26 42c-4 8-3 16 2 22" stroke="L" stroke-width="4" fill="none"/>`,
+speech:`<path d="M12 16h76v50H52L32 86V66H12z" fill="W"/><path d="M28 34h44M28 48h28"/>`,
+info:`<circle cx="50" cy="50" r="40" fill="C"/><path d="M50 44v26" stroke="W" stroke-width="8"/><circle cx="50" cy="30" r="4.5" fill="W"/>`};
+const BASE={S:'#1f3a5f',A:'#f4c542',B:'#e8873a',C:'#7fb3e0',D:'#8cc084',R:'#d9534f',E:'#d9776a',K:'#f2c6a0',W:'#ffffff',H:'#c9ced6',N:'#42619b',P:'#d6a76c',T:'#2b7a8a',G:'#7a4a2e',O:'none',X:'#00000026',L:'#ffffff8c'};
+const LP=(s,a,c,x={})=>({S:s,A:a,B:a,C:c,D:c,R:'#e0605a',E:c,K:s,W:s,H:s,N:c,P:a,T:c,G:s,O:s,X:'none',L:'none',...x});
+const mk=o=>({sw:3,rx:20,wt:800,font:"'Anton','Noto Sans Arabic','Impact','Arial Narrow',sans-serif",...o,pal:{...BASE,...(o.pal||{})}});
+const POP="'Anton','Noto Sans Arabic','Impact','Arial Narrow',sans-serif";
+const HAND="'Chalkboard SE','Comic Sans MS','Segoe Print','Noto Sans Arabic',cursive";
+const STY={
+aurora:mk({name:'1. Aurora glass (dark)',bg:'#2a1f8f',bg2:'#070b24',font:POP,wt:700,ink:'#f4f7ff',panels:['#ffffff22'],ps:'#ffffff66',sw:2,rx:34,pills:['#7c5cff','#00b4ff','#ff5ca8','#ffb020'],pt:'#fff',big:'#7be0ff',arrow:'#7be0ff',ban:'#ffffff22',bs:'#ffffff66',halo:'#ffffff26',hh:'#ffffff26',blob:1,shadow:1,pal:{S:'#f4f7ff',A:'#ffd166',B:'#ff5ca8',C:'#7be0ff',D:'#6ee7b7',R:'#ff6b6b',E:'#ff8fa3',W:'#e8eeff',K:'#ffd9bd',H:'#cfd6e6',N:'#7c5cff',X:'#0006'}}),
+sunrise:mk({name:'2. Sunrise (light)',bg:'#fffaf5',bg2:'#ffe2cf',font:POP,wt:700,ink:'#2b2d42',panels:['#ffffff'],ps:'#ffd5bd',sw:2,rx:34,pills:['#ff7a59','#7c5cff','#12b886','#339af0'],pt:'#fff',big:'#ff7a59',arrow:'#ff7a59',ban:'#ffffff',bs:'#ffd5bd',halo:'#fff0e6',hh:'#fff0e6',blob:1,shadow:1,pal:{S:'#2b2d42',A:'#ffc233',B:'#ff7a59',C:'#4dabf7',D:'#40c057',R:'#fa5252',E:'#ff8787'}}),
+ocean:mk({name:'3. Ocean clinic (light)',bg:'#f2fbff',bg2:'#d3eeff',font:POP,wt:700,ink:'#0b2540',panels:['#ffffff'],ps:'#c9e6f7',sw:2,rx:34,pills:['#1c7ed6','#12b886','#f59f00','#e8590c'],pt:'#fff',big:'#1c7ed6',arrow:'#1c7ed6',ban:'#ffffff',bs:'#c9e6f7',halo:'#e3f3ff',hh:'#e3f3ff',blob:1,shadow:1,pal:{S:'#0b2540',A:'#ffc233',B:'#1c7ed6',C:'#4dabf7',D:'#20c997',R:'#fa5252',E:'#ff8787'}}),
+clay:mk({name:'4. 3D Clay (blue)',clay:1,clean:1,bg:'#4a97ff',bg2:'#1b46cf',font:"'Poppins','Noto Sans Arabic','Segoe UI',Arial,sans-serif",wt:700,ink:'#ffffff',panels:['#0a2a7a42'],ps:'#ffffffb3',sw:2,rx:38,pills:['#ff5c7a','#ffb020','#2fd29b','#7c5cff'],pt:'#fff',big:'#ffe066',arrow:'#ffffff',ban:'#ffffff30',bs:'#ffffffb3',halo:'',hh:'#ffffff30',blob:0,shadow:1,pal:{S:'#12306b',A:'#ffc233',B:'#ff7a59',C:'#4dabf7',D:'#40c057',R:'#fa5252',E:'#ff8787'}})};
+const BV='<defs><filter id="bv" x="-35%" y="-35%" width="170%" height="185%" color-interpolation-filters="sRGB"><feGaussianBlur in="SourceAlpha" stdDeviation="5" result="b"/><feSpecularLighting in="b" surfaceScale="7" specularConstant="1" specularExponent="26" lighting-color="#fff" result="sp"><fePointLight x="-2000" y="-3000" z="3000"/></feSpecularLighting><feComposite in="sp" in2="SourceAlpha" operator="in" result="sp2"/><feComposite in="SourceGraphic" in2="sp2" operator="arithmetic" k1="0" k2="1" k3=".6" k4="0" result="lit"/><feDropShadow in="lit" dx="0" dy="10" stdDeviation="8" flood-color="#0a2a78" flood-opacity=".38"/></filter></defs>';
+const bev=(g,st)=>STY[st]&&STY[st].clay?`<g filter="url(#bv)">${g}</g>`:g;
+$('style').innerHTML=Object.entries(STY).map(([k,v])=>`<option value="${k}">${v.name}</option>`).join('');$('style').value='clay';
+const esc=s=>String(s??'').replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+function wrap(t,n){const o=[];let c='';for(const w of t.split(/\s+/)){if((c+' '+w).trim().length>n&&c){o.push(c);c=w}else c=(c+' '+w).trim()}if(c)o.push(c);return o}
+function fit(t,w,h,mx,mn,k=.62){let s=mx,L;for(;s>=mn;s-=2){const n=Math.floor(w/(s*k));L=wrap(t,n);if(L.length*s*1.18<=h&&L.every(l=>l.length<=n))return{L,s}}s=mn;return{L:wrap(t,Math.floor(w/(s*k))),s}}
+function T(t,x,y,w,h,mx,mn,fill,wt,font){t=String(t??'');const f=fit(t,w,h,mx,mn,/Anton/.test(font)?.47:/Grotesk/.test(font)?(t===t.toUpperCase()&&/[A-Z]{3}/.test(t)?.74:.66):.62),lh=f.s*1.18,y0=y+(h-f.L.length*lh)/2;
+ return `<text text-anchor="middle" font-family="${font}" font-weight="${/Anton/.test(font)?400:wt}" font-size="${f.s}" fill="${fill}">${f.L.map((l,i)=>`<tspan x="${x}" y="${(y0+lh*i+f.s*.95).toFixed(1)}">${esc(l)}</tspan>`).join('')}</text>`}
+function icon(name,x,y,sz,st){const D=STY[st],p=D.pal;
+ return `<g transform="translate(${x} ${y}) scale(${sz/100})"><g class="a-icon" stroke="S" stroke-width="${D.line?2.8:2.3}" stroke-linejoin="round" stroke-linecap="round" fill="none">${ICONS[name]||ICONS.info}</g></g>`
+ .replace(/(fill|stroke)="([SABCDREKWHNPTGOXL])"/g,(m,a,k)=>{const c=p[k];if(k==='X'&&c!=='none')return`fill="#000" fill-opacity=".16"`;if(k==='L'&&c!=='none')return`stroke="#fff" stroke-opacity=".6"`;return a==='fill'&&D.line?`fill="${c}" fill-opacity=".22"`:`${a}="${c}"`})}
+function renderOld(sp,st){
+ const D=STY[st]||STY.aurora,p=D.pal,DL=D.line?' class="a-draw" pathLength="1"':'',tx=(t,x,y,w,h,mx,mn,fill,wg)=>T(t,x,y,w,h,mx,mn,fill||D.ink,wg||D.wt,D.font);
+ const P=(sp.panels||[]).slice(0,4),n=Math.max(1,P.length),steps=sp.kind==='steps'&&n>1,pl=i=>D.pills[i%D.pills.length];
+ let o=`<svg xmlns="${NS}" viewBox="0 0 1280 720">`+'<g class="a-fade">'+tx(sp.headline,640,26,1200,112,64,34)+'</g>';
+ const g=n===2?110:n===3?84:64,w=n===1?1000:(1200-g*(n-1))/n,x0=n===1?140:40,y=190,h=400;
+ P.forEach((q,i)=>{
+  const x=x0+i*(w+g),cx=x+w/2,big=q.big,s0=o.length;
+  o+=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${D.rx}" fill="${D.panels?D.panels[i%D.panels.length]:'none'}" stroke="${D.ps}" stroke-width="${D.sw}"${DL}${D.shadow?' filter="url(#sh)"':''}/>`;
+  const tt=String(q.title||''),ts=tt.length>16?22:28,tw=Math.min(w-(steps?72:30),tt.length*ts*.62+56);
+  o+=`<rect x="${cx-tw/2}" y="${y-28}" width="${tw}" height="56" rx="${Math.min(28,D.rx)}" fill="${pl(i)}" stroke="${D.ps}" stroke-width="3"/>`+tx(tt,cx,y-28,tw-24,56,28,16,D.pt);
+  if(steps)o+=`<circle cx="${x+4}" cy="${y-6}" r="22" fill="${pl(i)}" stroke="${D.ps}" stroke-width="3"/>`+tx(i+1,x+4,y-28,40,44,28,20,D.pt);
+  if(n===1){o+=iconFor(q,x+70,y+60,280,st);const rx=x+400,rw=w-440;let ry=y+70;
+   if(big){o+=tx(big,rx+rw/2,ry,rw,150,130,50,D.big).replace('<text','<text class="a-num"');ry+=160}
+   o+=tx(q.text,rx+rw/2,ry,rw,y+h-40-ry,40,22)}
+  else{const ic=Math.min(w-60,big?196:236);o+=iconFor(q,cx-ic/2,y+40,ic,st);let ty=y+50+ic;
+   if(big){o+=tx(big,cx,ty,w-40,70,64,30,D.big).replace('<text','<text class="a-num"');ty+=72}
+   o+=tx(q.text,cx,ty,w-50,y+h-12-ty,32,18)}
+  o=o.slice(0,s0)+`<g class="a-up" style="--d:${.15+i*.18}s">`+o.slice(s0)+'</g>';
+  if(i<n-1){const ax=x+w+g/2,k=n>3?.8:1;
+   o+=`<g class="a-pop" style="--d:${.35+i*.18}s">`+(sp.kind==='compare'?`<circle cx="${ax}" cy="${y+h/2}" r="36" fill="${D.line?pl(0):p.A}" stroke="${D.ps}" stroke-width="4"/>`+tx('VS',ax,y+h/2-20,60,40,30,20,D.line?D.pt:'#1f2937')
+   :`<path transform="translate(${ax} ${y+h/2}) scale(${k})" d="M-28-16H8V-34L38 0L8 34V16H-28Z" fill="${D.arrow||'none'}" stroke="${D.ps}" stroke-width="4" stroke-linejoin="round"/>`)+'</g>'}});
+ return o+`<g class="a-up" style="--d:${.45+n*.18}s"><rect x="60" y="624" width="1160" height="76" rx="${Math.min(38,D.rx+12)}" fill="${D.ban||'none'}" stroke="${D.bs}" stroke-width="${Math.max(3,D.sw-1)}"${DL}/>`+tx(sp.takeaway,640,626,1060,72,34,20)+'</g></svg>'}
+const LAYS=['hero','mythfact','beforeafter','chain','bignum','checklist','cycle','grid','story','claim','bars','timeline','anatomy','mechanism','scenecompare','spine','stairs','column','orbit','hublist','tree','quad'];
+function fixScenes(a){const cut=(x,n)=>x==null?x:String(x).split(/\s+/).slice(0,n).join(' ');let prev='';
+ a.forEach((s,i)=>{s.headline=cut(s.headline,10);s.takeaway=cut(s.takeaway,18);
+  const it=s.items=(Array.isArray(s.items)?s.items:[]).filter(q=>q&&q.label).slice(0,6);it.forEach(q=>{q.label=cut(q.label,5);q.detail=cut(q.detail,STY[$('style').value].clean?9:18)});
+  let L=LAYS.includes(s.layout)?s.layout:'grid';const n=it.length,side=f=>it.some(f);
+  if((L==='mythfact'||L==='beforeafter')&&!(side(q=>+q.g===1)&&side(q=>+q.g!==1)))L='grid';
+  if(L==='checklist'&&!(side(q=>q.ok===false)&&side(q=>q.ok!==false)))L='chain';
+  if(L==='bars'&&it.filter(q=>+q.v>0).length<3)L='chain';
+  if(L==='grid'){if(n>=6)it.length=6;else if(n>=4)it.length=4;else L='chain'}
+  if(L==='hero'&&!s.hero&&!n)L='claim';if(L==='anatomy'&&!s.hero&&!n)L='claim';if(L==='scenecompare'&&n<2)L='chain';if(L==='mechanism'&&n<3)L='chain';
+  {const HUBL=['column','orbit','hublist','tree'],NEED={spine:3,stairs:3,column:3,orbit:4,hublist:3,tree:3,quad:4},CAP={spine:5,stairs:5,column:4,orbit:4,hublist:5,tree:4,quad:4};
+   if(NEED[L]){if(n<NEED[L]||(HUBL.includes(L)&&!s.hero))L=n>=2?'chain':'claim';else it.length=Math.min(n,CAP[L])}}
+  if(L===prev){const nx=(a[i+1]||{}).layout,alt=['chain','claim','grid','timeline','story'].find(l=>l!==prev&&l!==nx&&(l!=='grid'||n>=4));if(alt){L=alt;if(alt==='grid')it.length=n>=6?6:4}}
+  s.layout=prev=L;prepIcons(s)});return a}
+const bake=sc=>{try{sc.svg=clean(render(sc,$('style').value),$('style').value);sc.err=null}catch(e){sc.svg=null;sc.err=e.message}};
+const SPEC=`JSON shape: {"scenes":[{"start":12.3,"title":"max 5 words","role":"hook|myth|mechanism|evidence|number|comparison|steps|warning|action|takeaway","layout":"hero|mythfact|beforeafter|chain|bignum|checklist|cycle|grid|story|claim|bars|timeline|anatomy|mechanism|scenecompare|spine|stairs|column|orbit|hublist|tree|quad","headline":"max 8 words","sub":"max 14 words","items":[{"label":"max 4 words","detail":"max 14 words, a real fact from the transcript","search":"1-2 English words for the exact object to draw","type":"person|body|food|object|abstract","alt":["2-3 synonyms or broader backup words"],"icon":"fallback icon name","g":0,"ok":true,"v":42,"value":"42%","bubble":"max 6 words","meter":70,"block":false}],"titles":["left title","right title"],"hero":{"search":"","type":"","alt":[],"icon":""},"big":{"value":"55%","pct":55,"note":"max 12 words"},"claim":"max 16 words","focus":[0.5,0.4],"center":"max 2 words","person":"elder_man|elder_woman","takeaway":"max 14 words"}]}
+Layout rules: hero = hero object plus 4-6 items shown as callouts around it (best for anatomy, a food, a body part). mythfact = titles ["MYTH","FACT"], 2-3 items with g 0 (myth) and 2-3 with g 1 (fact). beforeafter = titles like ["BEFORE","AFTER"], 2-3 items each with g 0 or 1. chain = 3-5 items in cause-to-effect order. bignum = big (value; pct only if it is a percentage 0-100) plus 2-4 items. checklist = 3-6 items, ok true for do and false for dont. cycle = 3-5 items plus center. grid = exactly 4 or 6 items. story = person plus 3-4 items, label is a short spoken line and detail the fuller sentence. claim = claim plus 3-4 items. bars = 3-5 items each with numeric v (>0, same units) and value text like "42%", use it whenever the transcript compares quantities. timeline = 3-5 items in time or step order, label is the date or step name.
+anatomy = hero must be a body part or organ drawing (use an organ_ or body_ lib name) plus focus [x,y] between 0 and 1 saying where the zoom circle looks, center = max 3 words naming the zoomed part, plus 2-4 items that explain what happens there. mechanism = 3-5 items in cause order showing how something works inside the body; set block true on an item when the arrow after it is blocked or stopped (a drug, a blockage). scenecompare = exactly 2 items (left and right situation, for example younger vs older), each with a person icon, bubble = what that person thinks or says, meter = 0-100 level of the key measure, value = short label for the meter, and titles for the two sides. spine = 3-5 items: the first is the main idea shown at the top, the others branch below it. stairs = 3-5 items in rising order (levels, stages, progress, growth). column = hero object plus 3-4 items on its two sides, center = max 3 words naming the hero. orbit = hero object plus exactly 4 items around it (one subject with 4 parts, causes or effects), center = max 3 words. hublist = hero object plus 3-5 items listed beside it (one subject and its key points), center = max 3 words. tree = hero object as the root plus 3-4 items branching from it (a category and its types), center = max 3 words. quad = exactly 4 equal items in a 2x2 matrix, hero optional as the center symbol. Every slide MUST include role, layout, headline, sub and takeaway (a one-sentence conclusion, never empty). Slides must be rich: fill every field the layout needs, with specific facts, names and numbers. Use only facts and numbers that appear in the transcript. Give every item a search word for a concrete object (kidney, sesame seeds, leg), never a vague one. Fallback icon must be one of: ${Object.keys(ICONS).join(', ')}. Never use the same layout twice in a row, and use at least 6 different layouts when there are 6 or more slides. ICON RULES: every item on a slide must show a different object. Within one slide no two items may share the same search word, the same lib name, the same icon, or an alt word that is another item's search word. alt holds only other words for the SAME object. When two items are about similar things, draw a different concrete part of each (the cause vs the effect, the food vs the organ it affects). Use at most one person icon per slide unless the slide compares two people. Never put the same idea on two items or on two slides. Never exceed the word limits. Write headline, labels and details in the transcript's language; keep search and alt in English.`;
+
+/* ---------- API calls ---------- */
+const OKEXT=/\.(flac|mp3|mp4|mpeg|mpga|m4a|ogg|opus|wav|webm)$/i;
+function toWav(f,sr){const b=new ArrayBuffer(44+f.length*2),v=new DataView(b),w=(o,s)=>[...s].forEach((c,i)=>v.setUint8(o+i,c.charCodeAt(0)));
+ w(0,'RIFF');v.setUint32(4,36+f.length*2,true);w(8,'WAVEfmt ');v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);
+ v.setUint32(24,sr,true);v.setUint32(28,sr*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,'data');v.setUint32(40,f.length*2,true);
+ for(let i=0;i<f.length;i++){const s=Math.max(-1,Math.min(1,f[i]));v.setInt16(44+i*2,s<0?s*32768:s*32767,true)}
+ return new Blob([b],{type:'audio/wav'})}
+const MIME={flac:'audio/flac',mp3:'audio/mpeg',mp4:'audio/mp4',mpeg:'audio/mpeg',mpga:'audio/mpeg',m4a:'audio/mp4',ogg:'audio/ogg',opus:'audio/ogg',wav:'audio/wav',webm:'audio/webm'};
+async function pieces(file,force){
+ const m=file.name.match(OKEXT);
+ if(m&&!force&&file.size<=24e6){const ext=m[1].toLowerCase();return[{blob:file,name:'audio.'+ext,mime:MIME[ext],off:0}]}
+ say('Converting audio to WAV in your browser...');
+ const AC=window.AudioContext||window.webkitAudioContext;let ctx;
+ try{ctx=new AC({sampleRate:16000})}catch(e){ctx=new AC()}
+ let buf;try{buf=await ctx.decodeAudioData(await file.arrayBuffer())}catch(e){throw new Error('Your browser cannot read this audio file. Convert it to MP3 or WAV and try again.')}
+ const n=buf.length,ch=buf.numberOfChannels,mono=new Float32Array(n);
+ for(let c=0;c<ch;c++){const d=buf.getChannelData(c);for(let i=0;i<n;i++)mono[i]+=d[i]/ch}
+ const R=buf.sampleRate/16000,len=Math.floor(n/R),out=new Float32Array(len);
+ for(let i=0;i<len;i++)out[i]=mono[Math.floor(i*R)];
+ const step=16000*600,res=[];
+ for(let s=0,k=1;s<len;s+=step,k++)res.push({blob:toWav(out.subarray(s,Math.min(len,s+step)),16000),name:`part${k}.wav`,off:s/16000});
+ return res}
+async function groq(file){
+ try{return await groqRun(file,false)}
+ catch(e){if(!/must be one of|file type|invalid file/i.test(e.message))throw e;
+  say('Groq rejected the file as is. Converting to WAV and retrying...');return await groqRun(file,true)}}
+async function groqRun(file,force){
+ const parts=await pieces(file,force),all={segments:[],duration:0};
+ for(let i=0;i<parts.length;i++){
+  say(`Transcribing with Groq (part ${i+1} of ${parts.length})...`);
+  const j=await groqOne(new File([parts[i].blob],parts[i].name,{type:parts[i].mime||parts[i].blob.type||'audio/wav'}));
+  (j.segments||[]).forEach(s=>all.segments.push({start:s.start+parts[i].off,end:s.end+parts[i].off,text:s.text}));
+  all.duration=parts[i].off+(j.duration||0)}
+ if(!all.segments.length)throw new Error('Groq returned an empty transcript. Check that the audio has speech.');
+ return all}
+async function groqOne(file){
+ const fd=new FormData();fd.append('file',file);fd.append('model','whisper-large-v3-turbo');
+ fd.append('response_format','verbose_json');fd.append('timestamp_granularities[]','segment');
+ const r=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+$('gk').value.trim()},body:fd});
+ const j=await r.json();if(!r.ok)throw new Error('Groq: '+(j.error?.message||r.status));return j}
+async function gpt(messages,json,temp){
+ const r=await fetch('https://api.openai.com/v1/chat/completions',{method:'POST',
+  headers:{'Content-Type':'application/json',Authorization:'Bearer '+$('ok').value.trim()},
+  body:JSON.stringify({model:$('model').value.trim(),messages,...(/^gpt-4/i.test($('model').value.trim())?{temperature:temp??.5}:{}),...(json?{response_format:{type:'json_object'}}:{})})});
+ const j=await r.json();if(!r.ok)throw new Error('OpenAI: '+(j.error?.message||r.status));return j.choices[0].message.content}
+
+/* ---------- SVG cleaning + chalk effect ---------- */
+function clean(raw,style){
+ const m=raw.match(/<svg[\s\S]*<\/svg>/i);if(!m)throw new Error('No SVG in reply');
+ const d=new DOMParser().parseFromString(m[0],'image/svg+xml');
+ if(d.querySelector('parsererror'))throw new Error('Malformed SVG');
+ const el=d.documentElement;
+ el.querySelectorAll('script,foreignObject,iframe,a,animate,set').forEach(n=>n.remove());
+ el.querySelectorAll('image').forEach(n=>{if(!/^data:image\/(webp|png);base64,/.test(n.getAttribute('href')||''))n.remove()});
+ el.querySelectorAll('*').forEach(n=>[...n.attributes].forEach(a=>{
+  if(/^on/i.test(a.name)||/javascript:|https?:/i.test(a.value)&&a.name!=='xmlns')n.removeAttribute(a.name)}));
+ el.setAttribute('xmlns',NS);el.setAttribute('viewBox','0 0 1280 720');
+ el.removeAttribute('width');el.removeAttribute('height');
+ let s=new XMLSerializer().serializeToString(el);
+ const D=STY[style]||STY.aurora;
+ const flt=(D.clay?BV:'')+(D.shadow?'<defs><filter id="sh" x="-10%" y="-10%" width="120%" height="135%">'+(D.sh==='hard'?`<feDropShadow dx="9" dy="9" stdDeviation="0" flood-color="${D.hard}" flood-opacity="1"/>`:D.sh==='none'?'<feOffset dx="0" dy="0"/>':'<feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity=".25"/>')+'</filter></defs>':'')+(D.rough?`<defs><filter id="chalk" x="-2%" y="-2%" width="104%" height="104%"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="3" seed="4" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="${D.rough}" result="d"/>${D.grain?'<feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="9" result="g"/><feColorMatrix in="g" type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 -1.8 1.4" result="m"/><feComposite in="d" in2="m" operator="in"/>':''}</filter></defs>`:'');
+ const bg=D.bg2?`<defs><radialGradient id="vg" cx="50%" cy="45%" r="75%"><stop offset="0" stop-color="${D.bg}"/><stop offset="1" stop-color="${D.bg2}"/></radialGradient></defs><rect width="1280" height="720" fill="url(#vg)"/>`:`<rect width="1280" height="720" fill="${D.bg}"/>`;
+ s=s.replace(/^(<svg[^>]*>)/,'$1'+flt+bg+(D.rough?'<g filter="url(#chalk)">':'<g>')).replace(/<\/svg>\s*$/,'</g></svg>');
+ return s}
+
+/* ---------- Online icon library (Iconify) ---------- */
+const LIB=window.__LIBDATA,LIBMAP=Object.fromEntries(LIB.map(x=>[x.n,x]));
+$('isrc').options[0].text='My 3D library ('+LIB.length+' icons), then online';
+const isLib=q=>!!(q&&q.lib&&LIBMAP[q.lib]&&$('isrc').value==='mine');
+const libImg=(n,x,y,sz)=>{const m=LIBMAP[n],k=Math.min(sz/Math.sqrt(m.w*m.h),1.2*sz/Math.max(m.w,m.h)),w=m.w*k,h=m.h*k,
+ dx=x+(sz-w)/2,dy=h>sz?y+sz*1.03-h:y+(sz-h)/2;
+ return `<g class="a-icon"><image href="${m.d}" x="${dx.toFixed(1)}" y="${dy.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" preserveAspectRatio="xMidYMid meet"/></g>`};
+/* ---------- Icon matcher: checks the AI's icon picks against the library ---------- */
+const STM=w=>w.length>3&&!/ss$/.test(w)?w.replace(/s$/,''):w,
+ TK=t=>String(t||'').toLowerCase().replace(/\bbp\b/g,'blood pressure').split(/[^a-z0-9]+/).filter(w=>w.length>2).map(STM),
+ IDX=LIB.filter(x=>!x.n.endsWith('_b')).map(x=>({n:x.n,nt:new Set(TK(x.n.replace(/^[a-z]+_/,''))),kt:new Set(TK(x.k)),ph:String(x.k).toLowerCase().split(',').map(v=>v.trim()).filter(v=>v.includes(' '))})),
+ IDXM=new Map(IDX.map(e=>[e.n,e])),IDF=new Map();
+IDX.forEach(e=>new Set([...e.nt,...e.kt]).forEach(k=>IDF.set(k,(IDF.get(k)||0)+1)));
+IDF.forEach((v,k)=>IDF.set(k,Math.log(1+IDX.length/(1+v))));
+const iscore=(m,e,tx)=>{let s=0;m.forEach((w,k)=>{const a=e.nt.has(k),b=e.kt.has(k);if(a||b)s+=w*(IDF.get(k)||1)*(a?1.15:1)});
+ if(tx)e.ph.forEach(p=>{if(tx.includes(p))s+=6});return s/Math.sqrt(1+e.nt.size+e.kt.size*.35)},
+ qtoks=q=>{const m=new Map(),add=(t,w)=>TK(t).forEach(k=>m.set(k,Math.max(m.get(k)||0,w)));
+  add(q.label,3);add(q.search,3);(Array.isArray(q.alt)?q.alt:[]).forEach(a=>add(a,2));add(q.icon,1);add(q.detail,.4);return m},
+ qtext=q=>[q.label,q.search,...(Array.isArray(q.alt)?q.alt:[])].join(' ').toLowerCase().replace(/\bbp\b/g,'blood pressure');
+function bestLib(q,skip,ex){const m=qtoks(q),tx=qtext(q);let n=null,s=0;
+ IDX.forEach(e=>{if(e.n===ex||(skip&&skip(e.n)))return;const v=iscore(m,e,tx);if(v>s){s=v;n=e.n}});return{n,s}}
+/* ---------- Best-icon picker ----------
+   1) every item gets its own shortlist (top 10 library icons for ITS words, not a shared chunk list)
+   2) the AI judges that shortlist and returns a ranked pick (or nothing if no icon literally fits)
+   3) code only ever falls back to icons from that ranked pick: no blind keyword swaps from the whole library */
+const lkw=n=>String((LIBMAP[n]||{}).k||'');
+function topLib(q,k,minS,f){const m=qtoks(q),tx=qtext(q),r=[];
+ IDX.forEach(e=>{if(f&&!f.test(e.n))return;const v=iscore(m,e,tx);if(v>(minS||0))r.push([v,e.n])});
+ r.sort((a,b)=>b[0]-a[0]);const seen=new Set(),out=[];
+ for(const[v,n]of r){const kk=lkw(n);if(seen.has(kk))continue;seen.add(kk);out.push([n,v]);if(out.length>=k)break}
+ return out}
+function prepIcons(s){if($('isrc').value!=='mine')return;
+ iconQs(s).forEach(q=>{const own=LIBMAP[q.lib]?[q.lib]:[],loc=topLib(q,3,3).map(x=>x[0]);q._pk=[...new Set([...own,...loc])].slice(0,4)})}
+function dedupeLib(s){if($('isrc').value!=='mine')return;const used=new Set();
+ iconQs(s).forEach(q=>{const o=[...new Set([q.lib,...(q._pk||[])])].filter(n=>n&&LIBMAP[n]),n=o.find(x=>!used.has(x));
+  if(n){q.lib=n;used.add(n)}else delete q.lib})}
+const libsOf=s=>new Set(s?iconQs(s).map(q=>q.lib).filter(Boolean):[]);
+function assignIcons(scs,avoid){let prev=avoid||new Set();
+ scs.forEach(s=>{const used=new Set();
+  iconQs(s).forEach(q=>{const o=(q._pk||[]).filter(n=>LIBMAP[n]),n=o.find(x=>!used.has(x)&&!prev.has(x))||o.find(x=>!used.has(x));
+   if(n){q.lib=n;used.add(n)}else delete q.lib});
+  prev=used})}
+const ICSYS='You match slide items to pictures in a fixed icon library. For each item pick the icon whose picture literally shows the thing named by the item label (use the detail only to tell similar things apart). A related symbol is not enough: a blood pressure cuff needs a cuff, never a heart; blood sugar is not blood pressure; a medicine is not a food; a body part must be that exact body part. Return up to 3 names ranked best first, copied exactly from that item\'s own candidate list. If none of the candidates truly shows the thing, return an empty list for that item. Reply with JSON only: {"r":{"<id>":["name","name"]}}';
+async function pickIcons(scs,avoid){
+ if($('isrc').value!=='mine')return;
+ const jobs=[];
+ scs.forEach(s=>iconQs(s).forEach(q=>{if(!(q.label||q.search))return;
+  const c=topLib(q,10,.5).map(x=>x[0]);
+  if(q.type==='abstract')topLib(q,4,.5,/^concept_/).forEach(x=>{if(!c.includes(x[0]))c.push(x[0])});
+  if(LIBMAP[q.lib]&&!c.includes(q.lib))c.push(q.lib);
+  if(c.length)jobs.push({id:'i'+jobs.length,q,c})}));
+ if(jobs.length){say('Choosing the best icons...');
+  const B=[];for(let i=0;i<jobs.length;i+=40)B.push(jobs.slice(i,i+40));
+  for(let i=0;i<B.length;i+=3)await Promise.all(B.slice(i,i+3).map(async b=>{
+   try{const txt=b.map(j=>j.id+' | label: '+(j.q.label||j.q.search)+' | detail: '+String(j.q.detail||j.q.bubble||'').slice(0,90)+' | drawing: '+(j.q.search||'')+'\n'+j.c.map(n=>'  - '+n+' ('+lkw(n).slice(0,50)+')').join('\n')).join('\n\n'),
+     J=JSON.parse(await gpt([{role:'system',content:ICSYS},{role:'user',content:txt}],true,0)),R=J.r||J.picks||J;
+    b.forEach(j=>{const a=Array.isArray(R[j.id])?R[j.id]:[];j.q._pk=a.filter(n=>j.c.includes(n)).slice(0,3)})}
+   catch(e){}}))}
+ assignIcons(scs,avoid)}
+function libList(t){const m=new Map(),keep=new Set(IDX.filter(e=>/^(concept|organ)_/.test(e.n)).map(e=>e.n));TK(t).forEach(k=>m.set(k,1));
+ if(m.size)IDX.map(e=>({n:e.n,s:iscore(m,e,'')})).filter(x=>x.s>0).sort((a,b)=>b.s-a.s).slice(0,220).forEach(x=>keep.add(x.n));else IDX.forEach(e=>keep.add(e.n));
+ let pk='';return LIB.filter(x=>keep.has(x.n)).map(x=>{const v=x.k===pk?x.n:x.n+' ('+x.k+')';pk=x.k;return v}).join('; ')}
+const usedOf=a=>[...new Set(a.filter(Boolean).flatMap(s=>[...(s.hero?[s.hero]:[]),...(s.items||[])]).map(q=>q&&(q.lib||q.search||q.icon)).filter(Boolean))].join(', ')||'none';
+function libHint(t){return isLib({lib:LIB[0].n})?'\nICON LIBRARY: on every item (and on hero) add "lib" with exactly one name copied from this list whenever it fits the meaning; omit "lib" only if nothing fits. Every item on the same slide MUST use a different lib name: never repeat a name on one slide, pick a different related icon instead. Use at most one person icon per slide. Prefer lib over search. Use grandfather/grandmother poses for older people and doctor/nurse for medical staff. Use concept_check / concept_cross for right vs wrong or fact vs myth, and concept_warning / concept_stop for risks. Pick the name whose words literally match the thing in the item label (a blood pressure cuff label needs a blood pressure cuff icon, never a heart). If no name matches the label, omit lib and give a specific search noun instead. Names: '+libList(t):''}
+const ICN=new Map(),modeOf=st=>STY[st].line?'line':STY[st].clay?'clay':'color';
+const CL=['noto-v1','emojione-v1','fluent-emoji','noto','streamline-plump-color'];const SETS={clay:{person:CL,body:CL,food:CL,object:CL,abstract:CL},color:{person:['fluent-emoji','noto','twemoji','openmoji','streamline-emojis'],body:['fluent-emoji','healthicons','noto'],food:['fluent-emoji','noto','twemoji','openmoji','streamline-emojis'],object:['fluent-emoji','noto','twemoji','openmoji','streamline-emojis'],abstract:['fluent-emoji','noto','openmoji']},
+ line:{person:['healthicons','game-icons','ph'],body:['healthicons','game-icons','ph'],food:['game-icons','ph','tabler'],object:['game-icons','tabler','ph','mdi'],abstract:['tabler','ph','lucide','mdi']}};
+const setsOf=(q,m)=>SETS[m][q.type]||SETS[m].object,termsOf=q=>[q.search,...(Array.isArray(q.alt)?q.alt:[])].filter(Boolean);
+const ikey=(q,m)=>m+'|'+(q.type||'')+'|'+termsOf(q).join('/').toLowerCase();
+async function loadSvg(id){
+ if(ICN.has('id|'+id))return ICN.get('id|'+id);let res=null;
+ try{const[a,b]=id.split(':'),t=await(await fetch(`https://api.iconify.design/${a}/${b}.svg`)).text(),
+  m=t.match(/<svg([^>]*)>([\s\S]*)<\/svg>/i),vb=m&&m[1].match(/viewBox="([^"]+)"/);
+  if(m&&vb){const attrs=[...m[1].matchAll(/\s(fill|stroke|stroke-width|stroke-linecap|stroke-linejoin)="([^"]*)"/g)].map(x=>`${x[1]}="${x[2]}"`).join(' ');
+   res={vb:vb[1].trim().split(/\s+/).map(Number),body:m[2],attrs,id}}}catch(e){}
+ ICN.set('id|'+id,res);return res}
+const tok=n=>n.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+function score(id,term,rank,pos){const nt=tok(id.split(':')[1]),tt=tok(term);
+ const hit=tt.filter(w=>nt.includes(w)||nt.includes(w.replace(/s$/,''))||nt.includes(w+'s')).length;if(!hit||hit/tt.length<.6)return -1;
+ const extra=nt.filter(w=>!tt.includes(w)&&!tt.includes(w.replace(/s$/,''))).length;
+ return hit/tt.length*10-extra*1.5-rank*1.2-pos*.3+(nt.join('-')===tt.join('-')?6:0)}
+const SRCH=new Map();
+const searchList=(px,term)=>{const k=px+'|'+term;if(!SRCH.has(k))SRCH.set(k,fetch(`https://api.iconify.design/search?query=${encodeURIComponent(term)}&prefixes=${px}&limit=16`).then(r=>r.json()).then(j=>j.icons||[]).catch(()=>[]));return SRCH.get(k)};
+async function fetchIcon(q,mode,taken){
+ const key=ikey(q,mode);if(!taken&&ICN.has(key))return ICN.get(key);let res=null;
+ for(const term of termsOf(q)){
+  const lists=await Promise.all(setsOf(q,mode).map(px=>searchList(px,term))),c=[];
+  lists.forEach((l,r)=>l.forEach((id,pos)=>{const v=score(id,term,r,pos);if(v>0&&!(taken&&taken.has('id:'+id)))c.push({id,v})}));
+  c.sort((a,b)=>b.v-a.v);
+  for(const x of c.slice(0,3)){res=await loadSvg(x.id);if(res)break}
+  if(res)break}
+ if(!taken)ICN.set(key,res);return res}
+
+/* ---- one icon = one use per slide (library, online and built-in) ---- */
+const canon=n=>({person:'elder_man',group:'couple'}[n]||n);
+const iconQs=s=>[...(s.hero?[s.hero]:[]),...(s.items||[]),...(s.panels||[])].filter(q=>q&&typeof q==='object');
+const wtok=t=>String(t||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>2);
+const qwords=q=>new Set([...wtok(q.label),...wtok(q.search),...(Array.isArray(q.alt)?q.alt:[]).flatMap(wtok),...wtok(q.icon)]);
+function iconKey(q,mode){
+ if(q._b)return'ic:'+canon(q.icon);if(isLib(q))return'lib:'+q.lib;
+ const r=q._ic||($('isrc').value!=='builtin'&&q.search?ICN.get(ikey(q,mode)):null);
+ return r?'id:'+r.id:'ic:'+canon(ICONS[q.icon]?q.icon:'info')}
+function altLib(q,taken){return(q._pk||[]).find(n=>LIBMAP[n]&&n!==q.lib&&!taken.has('lib:'+n))||null}
+function altBuiltin(q,taken){const w=qwords(q),free=Object.keys(ICONS).filter(n=>!taken.has('ic:'+canon(n)));let best=null,bs=0;
+ free.forEach(n=>{const c=wtok(n).filter(t=>w.has(t)).length;if(c>bs){bs=c;best=n}});
+ return best||['info','check','book','speech','magnifier','chart','clock','calendar','leaf','drop','sun','warning','seed','bowl'].find(n=>!taken.has('ic:'+n))||'info'}
+async function uniqueIcons(scs,st){
+ const mode=modeOf(st),bi=$('isrc').value==='builtin';
+ for(const s of scs){
+  const qs=iconQs(s);qs.forEach(q=>{delete q._ic;delete q._b});const taken=new Set();
+  if(s.layout==='story'){const w=s.person==='elder_woman',g=w?'person_grandmother_standing':'person_grandfather_standing';
+   taken.add('lib:'+g);taken.add('ic:'+(w?'elder_woman':'elder_man'));taken.add('ic:'+(w?'elder_man':'elder_woman'))}
+  for(const q of qs){
+   const k=iconKey(q,mode);if(!taken.has(k)){taken.add(k);continue}
+   if(isLib(q)){const a=altLib(q,taken);if(a){q.lib=a;taken.add('lib:'+a);continue}delete q.lib}
+   if(!bi&&q.search){const r=await fetchIcon(q,mode,taken);if(r){q._ic=r;taken.add('id:'+r.id);continue}}
+   const b=altBuiltin(q,taken);q.icon=b;q._b=1;taken.add('ic:'+canon(b))}}}
+async function resolveIcons(scs,st){
+ if($('isrc').value!=='builtin'){const mode=modeOf(st),m=new Map();
+  scs.forEach(s=>iconQs(s).forEach(q=>{if(q.search&&!isLib(q))m.set(ikey(q,mode),()=>fetchIcon(q,mode))}));
+  const f=[...m.values()];for(let i=0;i<f.length;i+=6)await Promise.all(f.slice(i,i+6).map(fn=>fn()))}
+ await uniqueIcons(scs,st)}
+function iconFor(q,x,y,sz,st){const D=STY[st],h=D.halo?`<circle cx="${x+sz/2}" cy="${y+sz/2}" r="${sz*.62}" fill="${D.halo}"/>`:'';return h+(isLib(q)?iconFor0(q,x,y,sz,st):bev(iconFor0(q,x,y,sz,st),st))}
+function iconFor0(q,x,y,sz,st){
+ if(isLib(q))return libImg(q.lib,x,y,sz);
+ const mode=modeOf(st);if(q._b)return icon(q.icon,x,y,sz,st);const r=q._ic||($('isrc').value==='builtin'?null:(q.search?ICN.get(ikey(q,mode)):null));
+ if(!r)return icon(q.icon,x,y,sz,st);
+ const D=STY[st],ink=D.pal.S,[mx,my,w,h]=r.vb,k=sz/Math.max(w,h),u='i'+Math.random().toString(36).slice(2,6);
+ const fx=t=>t.replace(/currentColor/g,ink).replace(/id="([^"]+)"/g,`id="${u}$1"`).replace(/url\(#([^)]+)\)/g,`url(#${u}$1)`).replace(/href="#([^"]+)"/g,`href="#${u}$1"`);
+ const sw=D.line&&/stroke/.test(r.attrs)?r.attrs.replace(/stroke-width="[^"]*"/,'stroke-width="1.6"'):r.attrs;
+ return `<g transform="translate(${x+(sz-w*k)/2} ${y+(sz-h*k)/2}) scale(${k}) translate(${-mx} ${-my})"><g class="a-icon" ${fx(sw)}>${fx(r.body)}</g></g>`}
+
+/* ---------- Rich layouts ---------- */
+const BF="'Inter','Noto Sans Arabic','Segoe UI',Arial,sans-serif",G1='#2fd29b',R1='#ff5c7a';
+function render(sp,st){dedupeLib(sp);return sp.layout?renderNew(sp,st):renderOld(sp,st)}
+function renderNew(sc,st){
+ const D=STY[st]||STY.aurora,P=D.pills,ink=D.ink,pc=i=>P[i%P.length],it=(sc.items||[]).slice(0,6);
+ const t=(s,x,y,w,h,mx,mn,f,fo)=>T(s,x,y,w,h,mx,mn,f||ink,fo?600:D.wt,fo||D.font);
+ const rv=s=>`<g class="rv">${s}</g>`,card=(x,y,w,h,f)=>D.clean?'':`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="26" fill="${f||D.panels[0]}" stroke="${D.ps}" stroke-width="2" filter="url(#sh)"/>`;
+ const ic=(q,cx,cy,s)=>iconFor(q||{},cx-s/2,cy-s/2,s,st),tl=(cx,cy,s)=>D.tile?`<rect x="${cx-s/2}" y="${cy-s/2}" width="${s}" height="${s}" rx="${D.tile==='c'?s/2:s*.22}" fill="${D.tf}"/>`:'';
+ const dt=(s,x,y,w,h,mx=20,mn=12)=>{if(D.clean){mx=Math.max(mx,26);mn=Math.max(mn,17)}return `<g opacity="${D.clean?1:.86}">${t(s,x,y,w,h,mx,mn,ink,D.body||BF)}</g>`};
+ const badge=(n,x,y,c)=>`<circle cx="${x}" cy="${y}" r="20" fill="${c}"/>`+t(n,x,y-20,40,40,24,16,'#fff');
+ const chk=(x,y,ok)=>`<circle cx="${x}" cy="${y}" r="17" fill="${ok?G1:R1}"/><path d="${ok?'M-8 0L-2 7L9 -7':'M-7-7L7 7M7-7L-7 7'}" transform="translate(${x} ${y})" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+ const row=(q,x,y,w,h,i,f)=>{const s=Math.min(h-(D.clean?14:22),D.clean?(w<420?92:128):84),tw=w-s-52,tx=x+s+36+tw/2;return rv(card(x,y,w,h,f)+tl(x+s/2+20,y+h/2,s)+ic(q,x+s/2+20,y+h/2,D.tile?s*.6:s)+t(q.label,tx,y+8,tw,h*.42,32,18)+dt(q.detail,tx,y+8+h*.42,tw,h*.5-10))};
+ const blk=(q,x,y,w,h,i)=>{const c=D.clean,s=c?Math.min(w*.78,h*.52,230):Math.min(w*.55,h*.38,160),ly=y+s+(c?14:30),LH=h>300?68:42;return rv(card(x,y,w,h)+(c?`<ellipse cx="${x+w/2}" cy="${y+22+s}" rx="${s*.42}" ry="${s*.07}" fill="#0a2a78" opacity=".22"/>`:'')+ic(q,x+w/2,y+(c?10:18)+s/2,s)+(c?'':badge(i+1,x+30,y+30,pc(i)))+t(q.label,x+w/2,ly,w-24,c?LH:46,c?36:34,18)+dt(q.detail,x+w/2,ly+(c?LH:48),w-30,Math.max(c?44:20,y+h-(c?4:14)-ly-(c?LH:48)),24,12))};
+ const arrow=(x,y,c)=>rv(`<path transform="translate(${x} ${y})" d="M-14-24L14 0L-14 24" fill="none" stroke="${c}" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>`);
+ const L={
+ grid(){const n=it.length||1,c=n<=4?2:3,r=Math.ceil(n/c),g=D.clean?18:24,Y0=D.clean?140:150,HH=D.clean?468:436,w=(1200-g*(c-1))/c,h=(HH-g*(r-1))/r;return it.map((q,i)=>(c===2?row:blk)(q,40+(i%c)*(w+g),Y0+Math.floor(i/c)*(h+g),w,h,i)).join('')},
+ chain(){const n=Math.max(2,it.length),g=64,w=(1200-g*(n-1))/n;return it.map((q,i)=>blk(q,40+i*(w+g),160,w,420,i)+(i<n-1?arrow(40+i*(w+g)+w+g/2,370,pc(i)):'')).join('')},
+ hero(){const H=sc.hero||it[0]||{},cx=640,cy=370,n=Math.ceil(it.length/2)||1,h=Math.min(140,(430-16*(n-1))/n),o=[rv(`<circle cx="${cx}" cy="${cy}" r="205" fill="${D.hh}"/>`+ic(H,cx,cy,290))];
+  it.forEach((q,i)=>{const left=i%2===0,k=Math.floor(i/2),y=150+k*(h+16)+(430-n*h-16*(n-1))/2,w=370,x=left?40:870,ex=left?x+w:x,tx=cx+(left?-170:170),ty=cy+(y+h/2-cy)*.55;
+   o.push(`<path class="a-draw" pathLength="1" d="M${ex} ${y+h/2}L${tx} ${ty}" stroke="${pc(i)}" stroke-width="4" fill="none"/><circle cx="${tx}" cy="${ty}" r="8" fill="${pc(i)}"/>`,row(q,x,y,w,h,i))});return o.join('')},
+ split(kind){const T2=sc.titles||(kind==='checklist'?['DO',"DON'T"]:kind==='mythfact'?['MYTH','FACT']:['BEFORE','AFTER']),cols=kind==='checklist'?[G1,R1]:kind==='mythfact'?[R1,G1]:[pc(2),G1],g=q=>kind==='checklist'?(q.ok===false?1:0):(+q.g||0);let o='';
+  [0,1].forEach(s=>{const x=s?700:40,col=cols[s],ci=it.filter(q=>g(q)===s).slice(0,3),h=Math.max(1,ci.length),rh=(350-14*(h-1))/h;
+   o+=rv(`<rect x="${x}" y="150" width="540" height="440" rx="30" fill="${D.panels[0]}" stroke="${col}" stroke-width="4" filter="url(#sh)"/><rect x="${x+120}" y="130" width="300" height="52" rx="26" fill="${col}"/>`+t(String(T2[s]||''),x+270,130,280,52,30,16,'#fff'));
+   ci.forEach((q,i)=>{const y=204+i*(rh+14);o+=row(q,x+(D.clean?54:16),y,D.clean?470:508,rh,i,'#ffffff12')+(kind!=='beforeafter'?rv(chk(x+34,D.clean?y+rh/2:y+22,kind==='checklist'?s===0:s===1)):'')})});
+  return o+(kind==='beforeafter'?arrow(640,370,pc(0)):kind==='mythfact'?rv(`<circle cx="640" cy="370" r="40" fill="${pc(0)}"/>`+t('VS',640,350,70,40,30,18,'#fff')):'')},
+ bignum(){const b=sc.big||{},pct=Math.max(0,Math.min(100,parseFloat(b.pct)||0)),cx=300,cy=320,n=Math.min(it.length,4)||1,rh=(440-16*(n-1))/n;
+  return rv(card(40,150,520,440)+`<circle cx="${cx}" cy="${cy}" r="140" fill="none" stroke="${D.ps}" stroke-width="30" opacity=".5"/>`+(pct?`<circle cx="${cx}" cy="${cy}" r="140" fill="none" stroke="${pc(0)}" stroke-width="30" stroke-linecap="round" pathLength="100" stroke-dasharray="${pct} 100" transform="rotate(-90 ${cx} ${cy})"/>`:'')+t(String(b.value??''),cx,cy-70,230,140,110,44,D.big,POP).replace('<text','<text class="a-num"')+t(b.note,cx,490,460,90,28,16))+it.slice(0,4).map((q,i)=>row(q,600,150+i*(rh+16),640,rh,i)).join('')},
+ cycle(){const n=Math.max(3,Math.min(it.length,5)),cx=640,cy=372;let o=rv(`<ellipse cx="${cx}" cy="${cy}" rx="400" ry="165" fill="none" stroke="${D.ps}" stroke-width="5" stroke-dasharray="4 14" stroke-linecap="round"/>`+t(sc.center||'',cx,cy-45,300,90,52,24,D.big));
+  it.slice(0,5).forEach((q,i)=>{const a=-Math.PI/2+i*2*Math.PI/n;o+=row(q,cx+400*Math.cos(a)-170,cy+165*Math.sin(a)-62,340,124,i)});return o},
+ story(){const per=sc.person==='elder_woman'?'elder_woman':'elder_man',n=Math.min(it.length,4)||1,rh=(430-16*(n-1))/n;
+  return rv(`<circle cx="190" cy="370" r="165" fill="${D.hh}"/>`+(()=>{const n=per==='elder_woman'?'person_grandmother_standing':'person_grandfather_standing';return $('isrc').value==='mine'&&LIBMAP[n]?libImg(n,50,190,300):bev(icon(per,50,200,280,st),st)})())+it.slice(0,4).map((q,i)=>{const y=150+i*(rh+16);return rv(`<path d="M402 ${y+rh/2-14}l-28 14l28 14z" fill="${D.panels[0]}" stroke="${D.ps}" stroke-width="2"/>`)+row(q,400,y,840,rh,i)}).join('')},
+ claim(){const n=Math.min(it.length,4)||1,w=(1200-24*(n-1))/n;return rv(card(60,150,1160,170)+t('\u201C'+(sc.claim||sc.headline||'')+'\u201D',640,158,1060,154,60,28,D.big))+it.slice(0,4).map((q,i)=>blk(q,40+i*(w+24),338,w,252,i)).join('')}};
+ L.bars=()=>{const a=it.slice(0,5),n=a.length||1,h=Math.min(120,(440-14*(n-1))/n),oy=150+(440-n*h-14*(n-1))/2,mx=Math.max(1,...a.map(q=>+q.v||0));return a.map((q,i)=>{const y=oy+i*(h+14),bw=Math.max(10,(+q.v||0)/mx*420);return rv(card(40,y,1200,h)+ic(q,40+h/2+14,y+h/2,h-24)+t(q.label,340,y+4,380,h-8,32,16)+`<rect x="680" y="${y+h/2-17}" width="420" height="34" rx="17" fill="${D.ps}" opacity=".5"/><rect x="680" y="${y+h/2-17}" width="${bw}" height="34" rx="17" fill="${pc(i)}"/>`+t(String(q.value??q.v??''),1170,y+4,110,h-8,34,16,D.big))}).join('')};
+ L.timeline=()=>{const a=it.slice(0,5),n=Math.max(2,a.length),w=1200/n;return rv(`<path d="M50 360H1230" stroke="${D.ps}" stroke-width="6" stroke-linecap="round"/>`)+a.map((q,i)=>{const cx=40+w*i+w/2,up=i%2===0;return rv(`<path d="M${cx} 360V${up?352:372}" stroke="${pc(i)}" stroke-width="4"/><circle cx="${cx}" cy="360" r="15" fill="${pc(i)}"/>`)+blk(q,cx-w/2+8,up?146:372,w-16,up?206:230,i)}).join('')};
+ L.anatomy=()=>{const H=sc.hero||it[0]||{},cx=300,cy=380,s=380,f=sc.focus||[],fx=+f[0]||.5,fy=+f[1]||.4,zx=1070,zy=290,zr=120,k=2.6,px=cx+(fx-.5)*s,py=cy+(fy-.5)*s,n=Math.min(it.length,4)||1,rh=Math.min(120,(440-14*(n-1))/n);
+ return rv(`<circle cx="${cx}" cy="${cy}" r="205" fill="${D.hh}"/>`+ic(H,cx,cy,s)+`<circle cx="${px}" cy="${py}" r="34" fill="none" stroke="${pc(0)}" stroke-width="5"/><path class="a-draw" pathLength="1" d="M${px+30} ${py-14}L${zx-zr} ${zy}" stroke="${pc(0)}" stroke-width="4" fill="none"/><clipPath id="zc"><circle cx="${zx}" cy="${zy}" r="${zr}"/></clipPath><circle cx="${zx}" cy="${zy}" r="${zr+8}" fill="${D.panels[0]}" stroke="${pc(0)}" stroke-width="6"/><g clip-path="url(#zc)"><g transform="translate(${zx} ${zy}) scale(${k}) translate(${-px} ${-py})">${ic(H,cx,cy,s)}</g></g>`+t(sc.center||'',zx,zy+zr+22,300,64,36,18,D.big))+it.slice(0,4).map((q,i)=>row(q,560,150+i*(rh+14),370,rh,i)).join('')};
+L.mechanism=()=>{const a=it.slice(0,5),n=Math.max(2,a.length),g=70,w=(1200-g*(n-1))/n;return a.map((q,i)=>{const x=40+i*(w+g),ax=x+w+g/2;return blk(q,x,160,w,420,i)+(i<n-1?arrow(ax,370,q.block?R1:pc(i))+(q.block?rv(`<rect x="${ax-11}" y="290" width="22" height="160" rx="11" fill="${R1}" stroke="#fff" stroke-width="3"/>`):''):'')}).join('')};
+L.scenecompare=()=>{const T2=sc.titles||['BEFORE','AFTER'],cols=[pc(2),G1];let o='';
+ [0,1].forEach(s=>{const q=it[s]||{},x=s?660:40,col=cols[s],m=Math.max(0,Math.min(100,+q.meter||0)),bx=x+310;
+  o+=rv(`<rect x="${x}" y="150" width="580" height="440" rx="30" fill="${D.panels[0]}" stroke="${col}" stroke-width="4" filter="url(#sh)"/><rect x="${x+110}" y="130" width="360" height="52" rx="26" fill="${col}"/>`+t(String(T2[s]||q.label||''),x+290,130,340,52,28,16,'#fff')
+  +ic(q,x+150,330,250)+`<g fill="#fff" stroke="${col}" stroke-width="3"><ellipse cx="${x+430}" cy="250" rx="130" ry="62"/><circle cx="${x+320}" cy="322" r="11"/><circle cx="${x+296}" cy="348" r="6"/></g>`+t(q.bubble||q.label||'',x+430,200,220,100,28,14,'#12306b')
+  +`<rect x="${bx}" y="400" width="240" height="28" rx="14" fill="${D.ps}" opacity=".5"/><rect x="${bx}" y="400" width="${240*m/100}" height="28" rx="14" fill="${col}"/>`+t(q.value||q.label||'',bx+120,436,240,40,26,14,D.big)
+  +dt(q.detail,x+290,500,540,80))});
+ return o+rv(`<circle cx="640" cy="370" r="36" fill="${pc(0)}"/>`+t('VS',640,352,70,40,28,16,'#fff'))};
+
+ /* ---- layouts from layouts.zip (spine, stairs, column, orbit, hublist, tree, quad) ---- */
+ const ln=(d,c,w)=>`<path class="a-draw" pathLength="1" d="${d}" stroke="${c}" stroke-width="${w||6}" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  hubT=()=>String(sc.center||(sc.hero&&sc.hero.search)||'').trim();
+ L.spine=()=>{const a=it.slice(0,5),k=a.slice(1),m=Math.max(1,Math.ceil(k.length/2)),g=16,rh=Math.min(150,(300-g*(m-1))/m),y0=292+(300-m*rh-g*(m-1))/2,yc=j=>y0+Math.floor(j/2)*(rh+g)+rh/2;
+  let o=ln(`M640 262V${yc(Math.max(0,k.length-1))}`,pc(0));
+  k.forEach((q,j)=>{o+=ln(j%2?`M640 ${yc(j)}H770`:`M510 ${yc(j)}H640`,pc(j+1))});
+  o+=row(a[0]||{},400,146,480,116,0);
+  k.forEach((q,j)=>{o+=row(q,j%2?770:40,yc(j)-rh/2,470,rh,j+1)});return o};
+ L.stairs=()=>{const a=it.slice(0,5),n=Math.max(2,a.length),g=24,w=(1200-g*(n-1))/n,h=240,yb=580,sp=(yb-h-150)/(n-1),yt=i=>yb-i*sp+16;
+  let d=`M40 ${yt(0)}`;a.forEach((q,i)=>{const x=40+i*(w+g);d+=`H${x+w}`+(i<n-1?`H${x+w+g/2}V${yt(i+1)}`:'')});
+  return ln(d,pc(0),8)+a.map((q,i)=>blk(q,40+i*(w+g),yb-h-i*sp,w,h,i)).join('')};
+ L.column=()=>{const H=sc.hero||{},a=it.slice(0,4),side=(arr,x,r)=>arr.map((q,j)=>{const k=arr.length,h=206,y=150+(440-k*h-26*(k-1))/2+j*(h+26),i=j*2+r;
+   return ln(r?`M${x} ${y+h/2}H${x-30}`:`M${x+420} ${y+h/2}H${x+450}`,pc(i))+row(q,x,y,420,h,i)}).join('');
+  return side(a.filter((q,i)=>i%2===0),40,0)+side(a.filter((q,i)=>i%2===1),820,1)
+   +rv(card(490,150,300,440)+`<circle cx="640" cy="300" r="118" fill="${D.hh}"/>`+ic(H,640,300,200)+(hubT()?t(hubT(),640,430,270,140,46,22,D.big):''))};
+ L.orbit=()=>{const H=sc.hero||{},a=it.slice(0,4),cx=640,cy=370,pos=[[400,240,0],[880,240,1],[400,500,0],[880,500,1]];
+  let o=a.map((q,i)=>ln(`M${cx} ${cy}L${pos[i][0]} ${pos[i][1]}`,pc(i))).join('')
+   +rv(`<circle cx="${cx}" cy="${cy}" r="128" fill="${D.hh}" stroke="${pc(0)}" stroke-width="6"/>`+ic(H,cx,cy,210));
+  a.forEach((q,i)=>{const[x,y,r]=pos[i],tx=r?1108:172;
+   o+=rv(`<circle cx="${x}" cy="${y}" r="78" fill="${D.hh}" stroke="${pc(i)}" stroke-width="5"/>`+ic(q,x,y,110)+t(q.label,tx,y-62,260,60,34,18)+dt(q.detail,tx,y+4,260,90))});return o};
+ L.hublist=()=>{const H=sc.hero||{},a=it.slice(0,5),n=Math.max(1,a.length),g=16,rh=Math.min(120,(440-g*(n-1))/n),y0=150+(440-n*rh-g*(n-1))/2,yc=i=>y0+i*(rh+g)+rh/2;
+  return ln(`M400 370H440M440 ${yc(0)}V${yc(n-1)}`,pc(0))+a.map((q,i)=>ln(`M440 ${yc(i)}H480`,pc(i))).join('')
+   +rv(card(40,150,360,440)+`<circle cx="220" cy="340" r="120" fill="${D.hh}"/>`+ic(H,220,340,210)+(hubT()?t(hubT(),220,470,320,100,44,22,D.big):''))
+   +a.map((q,i)=>row(q,480,yc(i)-rh/2,760,rh,i)).join('')};
+ L.tree=()=>{const H=sc.hero||{},a=it.slice(0,4),n=Math.max(2,a.length),g=22,w=(1200-g*(n-1))/n,cx=i=>40+i*(w+g)+w/2;
+  return ln(`M640 270V296`,pc(0))+ln(`M${cx(0)} 296H${cx(n-1)}`,pc(0))+a.map((q,i)=>ln(`M${cx(i)} 296V330`,pc(i))).join('')
+   +rv(card(360,146,560,124)+ic(H,450,208,96)+(hubT()?t(hubT(),700,160,380,96,44,22,D.big):''))
+   +a.map((q,i)=>blk(q,40+i*(w+g),330,w,260,i)).join('')};
+ L.quad=()=>{const H=sc.hero,a=it.slice(0,4),pos=[[40,150],[680,150],[40,378],[680,378]];
+  return a.map((q,i)=>row(q,pos[i][0],pos[i][1],560,212,i)).join('')
+   +rv(`<circle cx="640" cy="370" r="54" fill="${D.hh}" stroke="${pc(0)}" stroke-width="6"/>`+(H?ic(H,640,370,72):''))};
+const map={spine:L.spine,stairs:L.stairs,column:L.column,orbit:L.orbit,hublist:L.hublist,tree:L.tree,quad:L.quad,anatomy:L.anatomy,mechanism:L.mechanism,scenecompare:L.scenecompare,bars:L.bars,timeline:L.timeline,hero:L.hero,mythfact:()=>L.split('mythfact'),beforeafter:()=>L.split('beforeafter'),checklist:()=>L.split('checklist'),chain:L.chain,bignum:L.bignum,cycle:L.cycle,grid:L.grid,story:L.story,claim:L.claim};
+ const role=String(sc.role||'').toUpperCase(),rw=role.length*13+36,U=s=>D.up?String(s??'').toUpperCase():s,ix=S.scenes.indexOf(sc),trl=`<text x="1240" y="36" text-anchor="end" font-family="${D.body||BF}" font-size="16" font-weight="700" letter-spacing="3" fill="${D.tag||pc(0)}">${esc(String(ix+1).padStart(2,'0')+' \u00B7 '+String(sc.title||'').toUpperCase())}</text>`;
+ return `<svg xmlns="${NS}" viewBox="0 0 1280 720">${D.blob?`<circle cx="1180" cy="70" r="230" fill="${pc(0)}" opacity=".13"/><circle cx="60" cy="690" r="270" fill="${pc(1)}" opacity=".11"/>`:''}`
+  +rv((role&&!D.clean?`<rect x="40" y="16" width="${rw}" height="30" rx="15" fill="${D.tag||pc(0)}"/>`+t(role,40+rw/2,16,rw-10,30,18,12,D.pt||'#fff'):'')+(D.tag?trl:'')+t(U(sc.headline),640,40,1200,66,56,30)+(sc.sub?dt(sc.sub,640,D.clean?98:100,1100,D.clean?40:30,20,14):''))
+  +(map[sc.layout]||L.grid)()
+  +rv((D.clean?'':`<rect x="60" y="618" width="1160" height="84" rx="42" fill="${D.ban}" stroke="${D.bs}" stroke-width="2" filter="url(#sh)"/>`)+t(U(sc.takeaway||sc.claim||sc.sub||sc.title),640,620,1060,80,40,20,D.bt))+'</svg>'}
+
+
+/* ---------- Pipeline ---------- */
+const SYS=()=>{const t=$('topic').value.trim();return [
+ 'You are a senior art director for explainer videos'+(t?' about '+t:'. First infer the topic and tone of the transcript and make the imagery and wording fit it')+'. You turn a spoken transcript into a sequence of slides that teach visually.',
+ 'RULES:',
+ '1. Fidelity: every fact, number, name and claim must come from the transcript. Never invent statistics or sources.',
+ '2. One idea per item. Two items on the same slide must never say the same thing or reuse the same wording.',
+ '3. No repeats: do not restate a point that an earlier slide already covered. Each slide must add something new.',
+ '4. Unique visuals: every item on a slide is drawn with a DIFFERENT object. Never reuse a search word, lib name or icon within one slide, and avoid the icons used on the previous slide.',
+ '5. Concrete visuals: choose a picturable noun (kidney, salt shaker, blood pressure cuff). For an abstract idea draw a symbol for it (scale, shield, warning triangle), never a vague word like health, risk or importance.',
+ '6. Be specific: labels and details carry names, numbers and mechanisms from the transcript, not generic filler.',
+ '7. Respect every word limit and the JSON shape exactly. Reply with JSON only, no markdown.'].join('\n')};
+async function plan(){
+ const tot=S.dur||S.segs.at(-1).end,n=Math.max(2,Math.min(200,Math.round(tot/Math.max(5,+$('gap').value||20)))),k=Math.ceil(n/12),all=[];
+ for(let c=0;c<k;c++){
+  const t0=tot*c/k,t1=tot*(c+1)/k,m=Math.max(1,Math.round(n*(c+1)/k)-Math.round(n*c/k)),
+  tx=S.segs.filter(s=>s.start>=t0&&(c===k-1||s.start<t1)).map(s=>`[${s.start.toFixed(1)}] ${s.text.trim()}`).join('\n');
+  if(!tx)continue;say(k>1?`Planning slides (part ${c+1} of ${k})...`:'Planning slides with OpenAI...');
+  const pv=all.length?` The previous slide used layout "${all.at(-1).layout}", so do not start with it. Topics already covered, do not repeat them: ${all.map(s=>s.headline).filter(Boolean).slice(-12).join(' | ')}. Icons used on the last slides, pick different ones: ${usedOf(all.slice(-2))}.`:'';
+  for(let a=0;a<2;a++){try{const J=JSON.parse(await gpt([{role:'system',content:SYS()},{role:'user',content:`Transcript with start times in seconds:\n${tx}\n\nFirst map the argument: claims, numbers, studies, mechanisms, contrasts, warnings and actions. Then choose exactly ${m} moments spread across this part of the audio${c?'':' (one near the start)'}, placed where the subject shifts rather than at even intervals. Give each a role in the story and pick the layout that best fits that role.${pv} "start" must copy a start time from the transcript.\n${SPEC+libHint(tx)}`}],true)).scenes;if(!Array.isArray(J))throw new SyntaxError('No scenes');all.push(...J);break}catch(e){if(a||!(e instanceof SyntaxError))throw e}}}
+ return fixScenes(all.map(s=>({...s,start:+s.start||0})).sort((a,b)=>a.start-b.start))}
+async function makeSvg(sc,i){
+ const end=S.scenes[i+1]?.start??1e9,keep=sc.start,old=sc.layout;
+ const ctx=S.segs.filter(s=>s.end>keep-1&&s.start<end).map(s=>s.text.trim()).join(' ').slice(0,1200);
+ const out=await gpt([{role:'system',content:SYS()},{role:'user',content:`Write ONE slide (scenes array with one item, start ${keep}) for these spoken words, using a different layout than "${old}". The neighbouring slides already use these icons, so pick different ones: ${usedOf([S.scenes[i-1],S.scenes[i+1]])}. Do not repeat what they say.\n\nSpoken words:\n${ctx}\n${SPEC+libHint(ctx)}`}],true);
+ const J=JSON.parse(out).scenes[0];fixScenes([J]);Object.keys(sc).forEach(k=>delete sc[k]);Object.assign(sc,J,{start:keep});await pickIcons([sc],new Set([...libsOf(S.scenes[i-1]),...libsOf(S.scenes[i+1])]));await resolveIcons([sc],$('style').value);bake(sc)}
+async function generate(){
+ say('Planning slides with OpenAI...');S.scenes=(await plan()).map(s=>({...s,start:+s.start||0}));
+ await pickIcons(S.scenes);say('Fetching icons...');await resolveIcons(S.scenes,$('style').value);S.scenes.forEach(bake);S.sel=0;draw();$('dlj').disabled=$('dlv').disabled=false;
+ const bad=S.scenes.filter(s=>!s.svg).length;say(bad?`Done. ${bad} slide(s) failed, use Redo.`:`Done. ${[...ICN].filter(([k,v])=>k.startsWith('id|')&&v).length} online icons used. Change the style any time.`,!!bad)}
+
+function runAnim(){const v=$('view');if($('anim').value==='off'||matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+ const dur=$('anim').value==='lively'?1100:850;
+ if(window.gsap){const Lv=$('anim').value==='lively';gsap.from(v.querySelectorAll('.rv'),{opacity:0,y:Lv?60:28,duration:Lv?.9:.65,stagger:Lv?.2:.12,ease:'power3.out',clearProps:'all'})}
+ v.querySelectorAll('.a-num tspan').forEach(t=>{const f=t.textContent,m=f.match(/\d[\d,]*\.?\d*/);if(!m)return;
+  const end=parseFloat(m[0].replace(/,/g,'')),dec=(m[0].split('.')[1]||'').length,t0=performance.now()+500;t.textContent=f.replace(m[0],'0');
+  (function f2(now){if(!t.isConnected)return;const k=Math.max(0,Math.min(1,(now-t0)/dur)),e=1-Math.pow(1-k,3);
+   t.textContent=k>=1?f:f.replace(m[0],(end*e).toFixed(dec));if(k<1)requestAnimationFrame(f2)})(performance.now())})}
+$('anim').onchange=draw;$('replay').onclick=draw;
+$('style').onchange=$('isrc').onchange=async()=>{say('Updating icons...');await resolveIcons(S.scenes,$('style').value);S.scenes.forEach(sc=>{if(sc.panels||sc.layout)bake(sc)});draw();say('')};
+async function run(fn){$('go').disabled=$('again').disabled=true;try{await fn()}catch(e){say(e.message,1)}$('go').disabled=false;$('again').disabled=!S.segs.length}
+$('go').onclick=()=>run(async()=>{
+ const f=$('file').files[0];if(!f)throw new Error('Choose an audio file first.');
+ if(!$('gk').value||!$('ok').value)throw new Error('Enter both API keys.');
+ say('Transcribing with Groq...');const j=await groq(f);S.segs=j.segments||[];
+ if(!S.dur)S.dur=j.duration||S.segs.at(-1).end;
+ $('tx').textContent=S.segs.map(s=>`[${s.start.toFixed(1)}s] ${s.text.trim()}`).join('\n');
+ await generate()});
+$('again').onclick=()=>run(generate);
+
+/* ---------- UI ---------- */
+const fmt=t=>Math.floor(t/60)+':'+String(Math.floor(t%60)).padStart(2,'0');
+function draw(){
+ const D=S.dur||1,tl=$('tl');tl.querySelectorAll('.seg').forEach(n=>n.remove());
+ S.scenes.forEach((sc,i)=>{const e=S.scenes[i+1]?.start??D,b=document.createElement('div');
+  b.className='seg'+(i===S.sel?' on':'');b.style.left=sc.start/D*100+'%';b.style.width=Math.max(.5,(e-sc.start)/D*100)+'%';
+  b.textContent=(i+1)+' '+(sc.title||'');b.title=sc.title;b.onclick=()=>pick(i,true);tl.appendChild(b)});
+ const c=$('cards');c.innerHTML='';
+ S.scenes.forEach((sc,i)=>{const d=document.createElement('div');d.className='card'+(i===S.sel?' on':'');
+  d.innerHTML=`<div class="thumb">${sc.svg||'<p style="padding:10px;color:#777">'+(sc.err||'Drawing...')+'</p>'}</div><h4></h4>
+  <div class="row"><input type="number" step="0.1" value="${sc.start.toFixed(1)}" aria-label="Start seconds"><span>s</span>
+  <button class="alt" data-a="redo">Redo</button><button class="alt" data-a="svg">SVG</button><button class="alt" data-a="png">PNG</button><button class="alt" data-a="del">Delete</button></div>`;
+  d.querySelector('h4').textContent=`${i+1}. ${sc.title||''} (${fmt(sc.start)})`;
+  d.querySelector('.thumb').onclick=()=>pick(i,true);
+  d.querySelector('input').onchange=e=>{sc.start=+e.target.value;S.scenes.sort((a,b)=>a.start-b.start);draw()};
+  d.querySelectorAll('button').forEach(bt=>bt.onclick=()=>act(bt.dataset.a,i));c.appendChild(d)});
+ const sc=S.scenes[S.sel];$('view').innerHTML=sc?.svg||'';$('view').className='m-'+$('anim').value;runAnim()}
+function pick(i,seek){S.sel=i;if(seek)$('au').currentTime=S.scenes[i].start;draw()}
+$('au').ontimeupdate=()=>{const t=$('au').currentTime;$('head').style.left=t/(S.dur||1)*100+'%';
+ let k=-1;S.scenes.forEach((s,i)=>{if(s.start<=t)k=i});if(k>=0&&k!==S.sel){S.sel=k;draw()}};
+function save(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click()}
+let FONTCSS=null;
+async function fontCss(){if(FONTCSS!==null)return FONTCSS;
+ try{let c=await(await fetch('https://fonts.googleapis.com/css2?family=Anton&family=Poppins:wght@600;700&family=Inter:wght@500;600&family=Noto+Sans+Arabic:wght@600&display=swap')).text();
+  for(const u of new Set([...c.matchAll(/url\((https:[^)]+)\)/g)].map(m=>m[1]))){const b=await(await fetch(u)).blob(),d=await new Promise(r=>{const f=new FileReader();f.onload=()=>r(f.result);f.readAsDataURL(b)});c=c.split(u).join(d)}
+  FONTCSS=c}catch(e){FONTCSS=''}return FONTCSS}
+async function act(a,i){const sc=S.scenes[i];
+ if(a==='del'){S.scenes.splice(i,1);S.sel=0;draw()}
+ if(a==='redo'){sc.svg=null;sc.err=null;draw();try{await makeSvg(sc,i)}catch(e){sc.err=e.message}draw()}
+ const ex=async()=>{const fc=await fontCss();return fc?sc.svg.replace(/^(<svg[^>]*>)/,'$1<style>'+fc+'</style>'):sc.svg};
+ if(a==='svg'&&sc.svg)save(`scene-${i+1}.svg`,new Blob([await ex()],{type:'image/svg+xml'}));
+ if(a==='png'&&sc.svg){const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=1920;c.height=1080;
+  c.getContext('2d').drawImage(img,0,0,1920,1080);c.toBlob(b=>save(`scene-${i+1}.png`,b))};
+  img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(await ex())}}
+$('dlj').onclick=()=>save('timeline.json',new Blob([JSON.stringify(S.scenes.map(s=>({start:s.start,title:s.title,idea:s.idea,svg:s.svg})),null,1)],{type:'application/json'}));
+let ASRC;
+$('dlv').onclick=async()=>{const b=$('dlv');b.disabled=true;
+ try{const au=$('au');if(!au.src)throw new Error('Choose an audio file first.');if(!window.MediaRecorder)throw new Error('This browser cannot record video.');
+  say('Preparing video...');const fc=await fontCss(),imgs=await Promise.all(S.scenes.map(sc=>new Promise(r=>{if(!sc.svg)return r(null);const im=new Image();im.onload=()=>r(im);im.onerror=()=>r(null);im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(fc?sc.svg.replace(/^(<svg[^>]*>)/,'$1<style>'+fc+'</style>'):sc.svg)}))),
+  c=document.createElement('canvas');c.width=1280;c.height=720;const g=c.getContext('2d'),AC=window._ac||(window._ac=new(window.AudioContext||window.webkitAudioContext)());
+  if(!ASRC){ASRC=AC.createMediaElementSource(au);ASRC.connect(AC.destination)}
+  const dst=AC.createMediaStreamDestination();ASRC.connect(dst);const st=c.captureStream(30);dst.stream.getAudioTracks().forEach(t=>st.addTrack(t));
+  const mt=['video/webm;codecs=vp9,opus','video/webm'].find(m=>MediaRecorder.isTypeSupported(m)),rec=new MediaRecorder(st,{mimeType:mt}),ch=[];
+  rec.ondataavailable=e=>e.data.size&&ch.push(e.data);const stopped=new Promise(r=>rec.onstop=r);
+  await AC.resume();au.currentTime=0;rec.start();await au.play();say('Recording in real time. Keep this tab open and in front.');
+  await new Promise(res=>{(function tick(){const t=au.currentTime;let k=0;S.scenes.forEach((s,i)=>{if(s.start<=t)k=i});g.fillStyle='#000';g.fillRect(0,0,1280,720);if(imgs[k])g.drawImage(imgs[k],0,0,1280,720);if(au.ended){res();return}requestAnimationFrame(tick)})()});
+  rec.stop();await stopped;ASRC.disconnect(dst);save('timeline.webm',new Blob(ch,{type:'video/webm'}));say('Video saved.')}
+ catch(e){say(e.message,1)}b.disabled=false};
+
+/* ===== Headless API (added for SalMedia Pipeline Part 1) ===== */
+window.SLIDEAPI={
+ styles:Object.keys(STY),
+ layouts:LAYS.slice(),
+ libSize:LIB.length,
+ // One slide from the spoken words of one B-roll item. Returns {svg,layout,headline,libs}.
+ async makeSlide(o){
+  $('ok').value=o.key||'';$('model').value=o.model||'gpt-5.6-sol';$('style').value=STY[o.style]?o.style:'clay';
+  $('isrc').value=o.icons||'mine';$('topic').value=o.topic||'';
+  const keep=+o.start||0,sc={start:keep};
+  const lay=LAYS.includes(o.layout)?` Use the layout "${o.layout}" if it fits the words; if it does not fit, pick the closest one.`:'';
+  const avL=o.avoidLayout?` Do not use the layout "${o.avoidLayout}".`:'';
+  const avI=(o.avoidLibs&&o.avoidLibs.length)?` Pick different icons than: ${o.avoidLibs.join(', ')}.`:'';
+  const out=await gpt([{role:'system',content:SYS()},{role:'user',content:`Write ONE slide (scenes array with one item, start ${keep}) for these spoken words.${lay}${avL}${avI}\n\nSpoken words:\n${String(o.text||'').slice(0,1200)}\n${SPEC+libHint(o.text||'')}`}],true);
+  let J;try{J=JSON.parse(out).scenes[0]}catch(e){throw new Error('OpenAI returned an invalid slide.')}
+  if(!J)throw new Error('OpenAI returned no slide.');
+  fixScenes([J]);await pickIcons([J],new Set(o.avoidLibs||[]));await resolveIcons([J],$('style').value);bake(J);
+  if(!J.svg)throw new Error(J.err||'Slide could not be drawn.');
+  return{svg:J.svg,layout:J.layout,headline:J.headline||'',libs:[...libsOf(J)]};
+ },
+ // SVG text -> 1920x1080 PNG data URL. Text is drawn by the engine, so no spelling errors.
+ async toPng(svg,w,h){
+  w=w||1920;h=h||1080;const fc=await fontCss();
+  const s=fc?svg.replace(/^(<svg[^>]*>)/,'$1<style>'+fc+'</style>'):svg;
+  return await new Promise((res,rej)=>{const img=new Image();
+   img.onload=()=>{const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);res(c.toDataURL('image/png'))};
+   img.onerror=()=>rej(new Error('SVG could not be turned into PNG.'));
+   img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(s)});
+ },
+ // Offline test helper: draw a slide from a ready scene (no OpenAI call).
+ bakeScene(sc,style,icons){$('style').value=STY[style]?style:'clay';$('isrc').value=icons||'builtin';fixScenes([sc]);bake(sc);return sc}
+};
+</script></body></html>
