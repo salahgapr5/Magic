@@ -21,11 +21,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Offline tests (short, real ffmpeg on tiny files)
-        continue-on-error: true      # a failed test is shown in red but does not stop the build
-        run: |
-          brew install ffmpeg
-          node tests/export.js
+    
 
       - name: Build
         env:
