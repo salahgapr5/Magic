@@ -22,11 +22,11 @@ jobs:
         run: npm install
 
       - name: Offline tests (short, real ffmpeg on tiny files)
-        continue-on-error: true      # a failed test is shown in red but does not stop the build
+        continue-on-error: true
         run: |
-          brew install ffmpeg
+          export VEM_FFMPEG="$(node -p "require('ffmpeg-static')")"
+          export VEM_FFPROBE="$(node -p "require('ffprobe-static').path")"
           node tests/export.js
-
       - name: Build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
