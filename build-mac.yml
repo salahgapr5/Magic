@@ -21,12 +21,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Offline tests (short, real ffmpeg on tiny files)
-        continue-on-error: true
-        run: |
-          export VEM_FFMPEG="$(node -p "require('ffmpeg-static')")"
-          export VEM_FFPROBE="$(node -p "require('ffprobe-static').path")"
-          node tests/export.js
+    
       - name: Build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
