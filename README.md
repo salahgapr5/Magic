@@ -46,3 +46,9 @@ Crossfade (Part B add-on): Settings has "Crossfade, seconds" (0 to 1, default 0 
 Part C, Step 1 (AptAvatar test, nothing in the app changes yet):
   tools/aptavatar-test/aptavatar_test.sh  - run it on RunPod (80 GB). See the top of the file for the 3 files to put next to it.
   Part C Step 2 (clips, GPU start/stop) and Step 3 (Supabase lock + queue) wait for the test result.
+
+Build on GitHub:
+  1. Make a new GitHub repo. Upload the CONTENTS of this folder (package.json must be at the top of the repo, with the .github folder).
+  2. Actions tab -> "Build Mac app" -> Run workflow. When it is green, open the run and download "SalMedia-Pipeline-mac" (a .dmg and a .zip).
+  3. The app is ad-hoc signed (no Apple account). First open: right-click the app -> Open -> Open.
+  The 16 MB icon library and ffmpeg make the download big. That is normal.
