@@ -1,0 +1,55 @@
+name: Build Mac app
+
+on:
+  workflow_dispatch:      # the "Run workflow" button: builds and gives you a download, publishes nothing
+  push:
+    tags:
+      - 'v*'              # pushing a tag like v1.4.0 also makes a GitHub Release
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-14     # Apple Silicon
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Offline tests (short, real ffmpeg on tiny files)
+        continue-on-error: true      # a failed test is shown in red but does not stop the build
+        run: |
+          brew install ffmpeg
+          node tests/export.js
+
+      - name: Build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            npx electron-builder --mac --publish always
+          else
+            npx electron-builder --mac --publish never
+          fi
+
+      - name: Check the packaged app
+        run: |
+          APP="dist/mac-arm64/SalMedia Pipeline.app"
+          FF="$APP/Contents/Resources/app.asar.unpacked/node_modules/ffmpeg-static/ffmpeg"
+          file "$FF"
+          "$FF" -version | head -1
+          "$FF" -hide_banner -encoders | grep -E "videotoolbox|libx264" || echo "WARNING: no h264 encoder in bundled ffmpeg"
+          codesign --verify --deep --strict "$APP" && echo "signature OK (ad-hoc)"
+
+      - name: Upload the app
+        uses: actions/upload-artifact@v4
+        with:
+          name: SalMedia-Pipeline-mac
+          path: |
+            dist/*.dmg
+            dist/*.zip
