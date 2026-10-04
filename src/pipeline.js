@@ -11,6 +11,7 @@ const stock = require('./modules/stock');
 const overlay = require('./modules/overlay');
 const exporter = require('./modules/export');
 const { probe } = require('./modules/media-probe');
+const { clipMap } = require('./modules/avatar-interface');
 const keystore = require('./keystore');
 const bin = require('./ffmpeg-bin');
 const { spawn } = require('child_process');
@@ -28,7 +29,8 @@ function keys() {
 function view() {
   if (!ctx.dir) return { dir: null };
   const s = ctx.s, t = s.transcript;
-  return { dir: ctx.dir, busy: ctx.busy, project: s.project, settings: s.settings, moments: s.moments, plan: s.plan,
+  const avatar = {}; try { for (const [id, c] of clipMap(ctx.dir)) avatar[id] = path.relative(ctx.dir, c.path); } catch {}
+  return { dir: ctx.dir, busy: ctx.busy, project: s.project, settings: s.settings, moments: s.moments, plan: s.plan, avatar,
     finalVideo: fs.existsSync(path.join(ctx.dir, 'final.mp4')) ? 'final.mp4' : null,
     transcript: t ? { duration: t.duration, words: t.words.length, language: t.language || '' } : null };
 }
@@ -37,12 +39,24 @@ const recount = (p) => { p.counts = counts(p.items); p.fallback = p.items.filter
 function save(name, data) { project.writeJson(ctx.dir, project.FILES[name], data); ctx.s[name] = data; }
 function need(c, msg) { if (!c) throw new Error(msg); }
 function guard() { need(ctx.dir, 'Open or create a project first.'); need(!ctx.busy, 'Another step is running. Wait or press Cancel.'); }
-function checkCancel() { if (ctx.abort && ctx.abort.signal.aborted) throw new Error('cancelled'); }
-async function exclusive(fn) {
-  guard(); ctx.busy = true; ctx.abort = new AbortController();
-  try { return await fn(); } finally { ctx.busy = false; ctx.abort = null; }
+function checkCancel(sig) { const g = sig || (ctx.abort && ctx.abort.signal); if (g && g.aborted) throw new Error('cancelled'); }
+// Cancel answers at once. The running work gets the stop signal and its slide windows are closed; if it is
+// slow to stop, the busy flag is cleared after 3 s at the latest, and a stopped run can no longer save files.
+async function exclusive(fn, { waitStop = false } = {}) { // waitStop: export kills ffmpeg at once and cleans up, so Cancel waits for that
+  guard(); ctx.busy = true;
+  const ac = new AbortController(); ctx.abort = ac;
+  const release = () => { if (ctx.abort === ac) { ctx.busy = false; ctx.abort = null; } };
+  const work = Promise.resolve().then(fn);
+  work.then(release, release);
+  const stopped = new Promise((_, rej) => ac.signal.addEventListener('abort', () => rej(new Error('cancelled'))));
+  stopped.catch(() => {}); // when nobody races it (export), the rejection must not be reported as an error
+  try { return await (waitStop ? work : Promise.race([work, stopped])); }
+  catch (e) { if (ac.signal.aborted) { const t = setTimeout(release, 3000); if (t.unref) t.unref(); } throw e; }
 }
-const cancel = () => { if (ctx.abort) ctx.abort.abort(); };
+const cancel = () => {
+  if (ctx.abort) ctx.abort.abort();
+  if (ctx.engine) { try { ctx.engine.destroy(); } catch {} ctx.engine = null; }
+};
 
 // ---------- inputs ----------
 function setInput(kind, src) { // kind: 'audio' | 'face'
@@ -86,21 +100,24 @@ function stepPlan() {
 function engine() { if (!ctx.engine) ctx.engine = new SlideEngine(); return ctx.engine; }
 async function stepSlides({ onlyMissing = true } = {}) {
   const k = keys(); need(ctx.s.plan, 'Build the plan first.');
-  const plan = ctx.s.plan;
+  const sig = ctx.abort.signal, plan = ctx.s.plan;
   const todo = plan.items.filter((i) => i.kind === 'png' && !(onlyMissing && i.slide && fs.existsSync(path.join(ctx.dir, i.slide))));
   if (!todo.length) { progress('slides', 'No PNG slides to make', 1); return; }
   progress('slides', 'OpenAI is choosing styles and layouts', 0.02);
-  const picks = await pickStyles({ items: todo, key: k.openai, model: k.model, rng: Math.random, signal: ctx.abort.signal });
+  const picks = await pickStyles({ items: todo, key: k.openai, model: k.model, rng: Math.random, signal: sig });
+  checkCancel(sig);
+  progress('slides', `Making slides: 0 of ${todo.length} (each one takes about 20 to 60 s)`, 0.05);
   const pm = new Map(picks.map((p) => [p.id, p]));
   let done = 0, failed = 0, next = 0;
   const worker = async () => {
     while (next < todo.length) {
-      checkCancel();
+      checkCancel(sig);
       const it = todo[next++], pk = pm.get(it.id);
       try {
         const r = await engine().render(it, { dir: ctx.dir, key: k.openai, model: k.model, style: pk.style, layout: pk.layout });
+        checkCancel(sig);
         it.slide = r.slide; it.style = r.style; it.layout = r.layout; delete it.error;
-      } catch (e) { it.slide = null; it.error = String(e.message || e).slice(0, 300); failed++; }
+      } catch (e) { checkCancel(sig); it.slide = null; it.error = String(e.message || e).slice(0, 300); failed++; }
       done++; recount(plan); save('plan', plan);
       progress('slides', `Slide ${done} of ${todo.length}${failed ? ` (${failed} failed)` : ''}`, 0.05 + 0.95 * (done / todo.length));
     }
@@ -134,23 +151,24 @@ function toPng(it, reason) { // no good stock: this item becomes a PNG slide (ma
 function needStockKey(k) { need(k.pexels || k.pixabay, 'Add a Pexels or Pixabay key in Keys first.'); }
 async function stepStock({ withSlides = true } = {}) {
   const k = keys(); need(ctx.s.plan, 'Build the plan first.'); needStockKey(k);
-  const plan = ctx.s.plan;
+  const sig = ctx.abort.signal, plan = ctx.s.plan;
   const todo = plan.items.filter((i) => (i.kind === 'clip' || i.kind === 'image') && !(i.file && fs.existsSync(path.join(ctx.dir, i.file))));
   if (todo.length) {
     progress('stock', 'OpenAI is writing the search words', 0.02);
     const missing = todo.filter((i) => !(i.searchWords && i.searchWords.length));
     if (missing.length) { const m = await stock.makeSearchWords({ items: missing, key: k.openai, model: k.model, signal: ctx.abort.signal }); for (const i of missing) i.searchWords = m.get(i.id); save('plan', plan); }
-    const sctx = stock.newCtx({ settings: ctx.s.settings, keys: k, items: plan.items, signal: ctx.abort.signal });
+    const sctx = stock.newCtx({ settings: ctx.s.settings, keys: k, items: plan.items, signal: sig });
     let done = 0, next = 0, stop = false; const errs = [];
     const worker = async () => {
       while (next < todo.length && !stop) {
-        checkCancel();
+        checkCancel(sig);
         const it = todo[next++];
         try {
           const r = await stock.fillItem(it, sctx, ctx.dir, verifyMedia);
+          checkCancel(sig);
           if (r.ok) applyFill(it, r); else toPng(it, r.reason);
         } catch (e) {
-          if (e.name === 'AbortError' || ctx.abort.signal.aborted) { stop = true; throw new Error('cancelled'); }
+          if (e.name === 'AbortError' || sig.aborted) { stop = true; throw new Error('cancelled'); }
           if (e.fatal) { stop = true; throw e; }
           errs.push(e.message);
         }
@@ -174,8 +192,9 @@ async function runStep(name) {
       else if (name === 'stock') await stepStock();
       else if (name === 'all') {
         needStockKey(keys()); // fail now, before the slow steps
-        if (!ctx.s.transcript) await stepTranscribe(); checkCancel();
-        await stepMoments(); checkCancel(); stepPlan(); checkCancel(); await stepStock({ withSlides: false }); checkCancel(); await stepSlides({ onlyMissing: false });
+        const sig = ctx.abort.signal;
+        if (!ctx.s.transcript) await stepTranscribe(); checkCancel(sig);
+        await stepMoments(); checkCancel(sig); stepPlan(); checkCancel(sig); await stepStock({ withSlides: false }); checkCancel(sig); await stepSlides({ onlyMissing: false });
       } else throw new Error('Unknown step.');
       progress(name, 'Done', 1);
       return view();
@@ -191,8 +210,10 @@ async function regenerate(id) {
     if (it.kind !== 'png') { await regenStock(it); return view(); }
     const k = keys();
     const others = STYLES.filter((s) => s !== it.style), style = others[Math.floor(Math.random() * others.length)];
+    const sig = ctx.abort.signal;
     progress('item', 'Making a new slide', 0.3);
     const r = await engine().render(it, { dir: ctx.dir, key: k.openai, model: k.model, style, layout: '', avoidLayout: it.layout });
+    checkCancel(sig);
     it.slide = r.slide; it.style = r.style; it.layout = r.layout; delete it.error;
     recount(ctx.s.plan); save('plan', ctx.s.plan);
     return view();
@@ -301,7 +322,7 @@ async function exportVideo() {
     } catch (e) { if (ctl.cancelled) throw new Error('cancelled'); throw e; }
     finally { ctx.abort && ctx.abort.signal.removeEventListener('abort', onAbort); }
     return { ...view(), note };
-  });
+  }, { waitStop: true });
 }
 const itemKind = (id) => findItem(id).kind;
 function shutdown() { if (ctx.engine) ctx.engine.destroy(); }

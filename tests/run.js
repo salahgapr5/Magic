@@ -366,6 +366,18 @@ const S0 = { maxClips: 4, maxSec: 15, pngPct: 70, clipImageRatio: 4, maxStockRow
   await t('Busy guard: a second step cannot start while one runs; Cancel stops', async () => {
     const p1 = pipe.runStep('all'); await assert.rejects(pipe.runStep('moments'), /Another step/); pipe.cancel(); await p1.catch(() => {});
   });
+  await t('Cancel answers at once even when a slide is slow, and nothing is saved after it', async () => {
+    for (let i = 0; i < 80 && pipe.view().busy; i++) await new Promise((r) => setTimeout(r, 100)); // the cancelled run above may still be winding down
+    await pipe.runStep('all'); const it = pipe.view().plan.items.find((i) => i.kind === 'png'); const before = it.slide;
+    const orig = SlideEngine.prototype.render; SlideEngine.prototype.render = () => new Promise((r) => setTimeout(() => r({ slide: 'slides/LATE.png', layout: 'chain', style: 'clay' }), 1500));
+    try {
+      const t0 = Date.now(), p1 = pipe.regenerate(it.id); setTimeout(() => pipe.cancel(), 100);
+      await assert.rejects(p1, /cancelled/); assert.ok(Date.now() - t0 < 1000, 'Cancel took ' + (Date.now() - t0) + ' ms');
+      await new Promise((r) => setTimeout(r, 1800));
+      assert.strictEqual(pipe.view().plan.items.find((i) => i.id === it.id).slide, before, 'a cancelled slide must not be saved'); assert.strictEqual(pipe.view().busy, false);
+    } finally { SlideEngine.prototype.render = orig; }
+  });
+  await t('view() lists avatar clips for the preview', async () => { assert.deepStrictEqual(pipe.view().avatar, {}); });
   await t('keystore only accepts known key names (no path tricks)', () => {
     delete require.cache[require.resolve(S + '/keystore')]; const real = require(S + '/keystore'); assert.throws(() => real.setKey('../../evil', 'x'), /Unknown key name/);
   });

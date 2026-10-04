@@ -1,12 +1,14 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>SalMedia Pipeline</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem("theme")||"light"}catch(e){document.documentElement.dataset.theme="light"}</script>
 <link rel="stylesheet" href="style.css"></head>
 <body>
 <header class="top">
   <div class="brand">SalMedia <span class="tag">PIPELINE · PART B</span></div>
   <div class="spacer"></div>
   <span id="projPath" class="small"></span>
+  <select class="btn" id="theme" title="Colours"><option value="light">Light</option><option value="dark">Dark</option><option value="auto">Auto</option></select>
   <button class="btn" id="newProj">New project</button>
   <button class="btn" id="openProj">Open project</button>
   <button class="btn" id="keysBtn">Keys</button>
@@ -56,6 +58,15 @@
       </div>
     </section>
 
+    <section class="panel" id="pvPanel"><h2>Preview</h2>
+      <div class="sec">
+        <div class="pvstage" id="pvStage"><img id="pvImg" alt="" hidden><video id="pvVid" muted playsinline hidden></video><video id="pvOv" muted loop playsinline hidden></video><div class="pvtag" id="pvTag"></div></div>
+        <div class="pvbar"><button class="btn primary" id="pvPlay">Play</button><input type="range" id="pvSeek" min="0" max="1000" value="0"><span id="pvTime" class="small">0:00 / 0:00</span></div>
+        <div class="small">Quick preview with your audio. Click a time in the plan to jump there. The exported video can differ a little (crossfade, overlay blend, blurred background).</div>
+        <audio id="pvAudio" preload="auto"></audio>
+      </div>
+    </section>
+
     <section class="panel"><h2>4. Export</h2>
       <div class="sec">
         <div class="actions"><button class="btn primary" id="exportBtn">Export video</button><button class="btn" id="showFinal" hidden>Show final.mp4</button></div>
@@ -65,6 +76,7 @@
 
     <section class="panel"><h2>5. Plan (time order)</h2>
       <div id="counts" class="counts"></div>
+      <div id="breakdown" class="sec small"></div>
       <div class="actions"><span class="small">Overlay on all B-roll:</span><button class="btn" id="ovAllOn">All on</button><button class="btn" id="ovAllOff">All off</button></div>
       <div id="list" class="list"><div class="empty">Nothing yet. Choose the audio and the face photo, then press Run all steps.</div></div>
     </section>
